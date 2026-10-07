@@ -7,7 +7,7 @@
   'use strict';
   const KEY = '__gptUsageV4';
   const STATE_SCHEMA = 3;
-  const APP_VERSION = '3.6.0.62';
+  const APP_VERSION = '3.6.0.63';
   const LOCAL_SCOPE = 's_' + '0'.repeat(40);
   const DAY = 86400000;
   const VERIFIED = '2026-09-22';

@@ -4,7 +4,7 @@ English | [中文](README.md)
 
 ![SakuraMeter](assets/sakurameter-128.png)
 
-**3.6.0.62**
+**3.6.0.63**
 
 A Chrome extension for local ChatGPT activity tracking, heatmaps, trends, and read-only Codex allowance information. Sakura dark and pale-pink themes share the same layout and interactions.
 

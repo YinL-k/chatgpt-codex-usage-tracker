@@ -9,7 +9,7 @@ chrome.storage.local.setAccessLevel({accessLevel:'TRUSTED_CONTEXTS'}).catch(()=>
    A stale content script from an unpacked-extension reload cannot answer through
    the new runtime, so the ping fails and we safely re-inject. Normal service-worker
    wakeups leave a healthy tracker untouched. */
-const TRACKER_VERSION='3.6.0.62';
+const TRACKER_VERSION='3.6.0.63';
 async function trackerAlive(tabId){
   try{const r=await chrome.tabs.sendMessage(tabId,{type:'UG_TRACKER_PING'});return r?.ok===true&&r.version===TRACKER_VERSION;}catch{return false;}
 }

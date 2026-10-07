@@ -4,7 +4,7 @@
 
 ![SakuraMeter](assets/sakurameter-128.png)
 
-**3.6.0.62**
+**3.6.0.63**
 
 在浏览器本地记录 ChatGPT 活动，查看热力图、使用趋势和 Codex 额度。保留 Sakura 玻璃风格，提供樱花粉浅色和深色主题、中英文界面。
 
@@ -38,7 +38,7 @@
 
 ## 数据、权限与网络
 
-统计在本地保存，不保存聊天正文、密码或认证令牌；发送确认短暂在内存比较文本，过期即丢弃。保留历史日期键、`__gptUsageV4`、schema 3、手动计划与校准；活动导出格式 version 5，appVersion 3.6.0.62。
+统计在本地保存，不保存聊天正文、密码或认证令牌；发送确认短暂在内存比较文本，过期即丢弃。保留历史日期键、`__gptUsageV4`、schema 3、手动计划与校准；活动导出格式 version 5，appVersion 3.6.0.63。
 
 当前必需权限为 `storage`、`tabs`、`sidePanel`、`scripting`、`declarativeNetRequestWithHostAccess`、`alarms`、`notifications`，以及 `https://chatgpt.com/*` 主机权限。Side Chat 对其他网站的访问属于**可选权限**：只有在你授权当前网站或全部网站后，才会读取该页面的可见正文用于本地上下文；可以随时暂停或撤销权限。`sidePanel` 用于 Side Chat 面板，`scripting` 用于在已授权页面运行本地上下文脚本，`declarativeNetRequestWithHostAccess` 仅在 Side Chat 面板打开期间处理 ChatGPT 子框架所需的响应头规则；`alarms` 用于在后台按计划检查重置预测，`notifications` 用于在满足通知条件时显示浏览器/系统通知。个人额度使用 GET `/api/auth/session` 和 `/backend-api/wham/usage`，令牌仅用于请求内存。公开预测使用不携带账户信息的 GET；第三方会收到 IP 等普通连接元数据。无开发者后台、遥测、自动模型调用或模型代理。详见 [隐私说明](PRIVACY.md)。
 

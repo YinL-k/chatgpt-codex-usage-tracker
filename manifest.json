@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "__MSG_extensionName__",
-  "version": "3.6.0.62",
-  "version_name": "3.6.0.62",
+  "version": "3.6.0.63",
+  "version_name": "3.6.0.63",
   "description": "__MSG_extensionDescription__",
   "minimum_chrome_version": "116",
   "action": {
