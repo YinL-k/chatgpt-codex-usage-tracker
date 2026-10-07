@@ -331,3 +331,10 @@ body.sm-content-reveal #welcome{opacity:0}
   .sm-ambient-flow .sm-ambient-blob{animation:none!important}
   body[data-side-stage="transition"] #welcome{transition:none!important}
 }
+.reference-setting{display:flex;justify-content:space-between;align-items:center;gap:18px;padding:8px 0;font-size:13px}.reference-setting input{width:34px;height:18px;accent-color:var(--pink,#c786a1);cursor:pointer}.reference-setting input:focus-visible{outline:2px solid currentColor;outline-offset:3px}
+
+.reference-setting input{appearance:none;position:relative;flex:none;border:1px solid rgba(185,133,155,.4);border-radius:20px;background:rgba(132,104,118,.16);transition:background .15s}
+.reference-setting input::before{content:'';position:absolute;width:12px;height:12px;top:2px;left:2px;border-radius:50%;background:currentColor;opacity:.7;transition:transform .15s}
+.reference-setting input:checked{background:rgba(199,134,161,.38);border-color:#c786a1}.reference-setting input:checked::before{transform:translateX(14px);opacity:1}
+@media(forced-colors:active){.reference-setting input{appearance:auto}.reference-setting input::before{display:none}}
+@media(prefers-reduced-motion:reduce){.reference-setting input,.reference-setting input::before{transition:none}}

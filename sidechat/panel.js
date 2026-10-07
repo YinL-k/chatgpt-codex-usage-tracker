@@ -8,7 +8,7 @@
   const t = key => SakuraSideStrings[lang]?.[key] || SakuraSideStrings.en[key] || key;
   function post(m) { try { lifecycle?.postMessage(m); } catch { connect(); } }
   function tellFrame() {
-    try { bridge?.postMessage({ type: 'SC_UPDATE', context: state?.context || null, pageDismissed:state?.pageDismissed, source:state?.source, theme, lang, captureStatus: state?.status || '', labels: SakuraSideStrings[lang] }); } catch {}
+    try { bridge?.postMessage({ type: 'SC_UPDATE', context: state?.context || null, pageDismissed:state?.pageDismissed, source:state?.source, deduplicatePage:state?.deduplicatePage!==false, theme, lang, captureStatus: state?.status || '', labels: SakuraSideStrings[lang] }); } catch {}
   }
   function applyLanguage() {
     document.documentElement.lang = lang === 'zh' ? 'zh-CN' : 'en';
@@ -31,6 +31,7 @@
     try {
       lifecycle = chrome.runtime.connect({ name: 'SC_PANEL_LIFETIME' });
       lifecycle.onMessage.addListener(m => {
+        if (m.type === 'SC_PAGE_SNAPSHOT_RESULT') { try { bridge?.postMessage(m); } catch {} }
         if (m.type === 'SC_STATE') { state = m.state; connected = true; render(); tellFrame(); }
         if (m.type === 'SC_ERROR') toast(({ selection_too_long:'tooLong', page_unavailable:'unavailable' })[m.error] || 'connectionError');
       });
@@ -44,6 +45,8 @@
   }
   function render() {
     if (!state) return;
+    $('page-reference-toggle').checked=!state.pageDismissed;
+    $('deduplicate-page-toggle').checked=state.deduplicatePage!==false;
     const source = state.source;
     let host = ''; try { host = new URL(source?.url).hostname; } catch {}
     $('source-title').textContent = host || source?.title || t('sourceWaiting');
@@ -249,6 +252,7 @@
         try { const u = new URL(m.url); if (u.origin === 'https://chatgpt.com') { lastChatURL = u.origin + u.pathname; syncChatSurface(lastChatURL); } } catch {}
       } else if (m.type === 'SC_CLEAR') post({ type: 'SC_CLEAR', id: m.id, selectionKey: m.selectionKey });
       else if (m.type === 'SC_DISMISS_PAGE' || m.type === 'SC_RESTORE_PAGE') { if(state && m.type==='SC_DISMISS_PAGE'){state.pageDismissed=true;if(state.context)state.context={...state.context,page:null};}post(m); }
+      else if (m.type === 'SC_ENSURE_PAGE') post(m);
       else if (m.type === 'SC_CONTEXT_USED') post(m);
       else if (m.type === 'SC_SENT') post(m);
       else if (m.type === 'SC_ERROR') toast(m.key || 'sendError');
@@ -293,7 +297,7 @@
       // Keep the permission request directly in this user-gesture handler.
       const allowed = await chrome.permissions.request({ origins });
       if (!allowed) return toast('denied');
-      if (first) await chrome.storage.local.set({ __sakuraSidePrefsV1: { enabled: true } });
+      if (first) { const d=await chrome.storage.local.get('__sakuraSidePrefsV1');await chrome.storage.local.set({__sakuraSidePrefsV1:{...d.__sakuraSidePrefsV1,enabled:true}}); }
       post({ type: 'SC_REFRESH' });
     } catch { toast('denied'); }
   }
@@ -309,6 +313,15 @@
   $('theme').addEventListener('click', () => applyTheme(theme === 'dark' ? 'light' : 'dark'));
   $('language').addEventListener('click', () => { lang = lang === 'en' ? 'zh' : 'en'; applyLanguage(); void chrome.storage.sync.set({ gptTrackerLang: lang }); });
   $('settings').addEventListener('click', () => { closePopovers(); $('preferences').showModal(); });
+  $('page-reference-toggle').addEventListener('change',e=>{
+    const value=e.target.checked;
+    if(state){state.pageDismissed=!value;if(!value&&state.context)state.context={...state.context,page:null};}
+    if(bridge)bridge.postMessage({type:'SC_PAGE_REFERENCE',value});else post({type:value?'SC_RESTORE_PAGE':'SC_DISMISS_PAGE',id:state?.context?.id,pageIdentity:state?.source?.pageIdentity});
+    render();
+  });
+  $('deduplicate-page-toggle').addEventListener('change',e=>{
+    if(state)state.deduplicatePage=e.target.checked;tellFrame();post({type:'SC_PAGE_PREFS',deduplicatePage:e.target.checked});
+  });
   $('close-settings').addEventListener('click', () => $('preferences').close());
   $('manage').addEventListener('click', () => chrome.tabs.create({ url: 'chrome://extensions/?id=' + chrome.runtime.id }));
   window.addEventListener('storage', e => { if (e.key === 'gptTrackerTheme') applyTheme(e.newValue); });

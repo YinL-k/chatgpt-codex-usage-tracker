@@ -3,7 +3,8 @@
   'use strict';
   const K = SakuraSideCore, SESSION = '__sakuraSideContextsV1', RULE = 73001;
   const panels = new Map(), activeTabs = new Map(), paused = new Set(), generations = new Map();
-  const dismissed = new Map();
+  const dismissed = new Map(), sourceClocks=new Map(), tabEpochs=new Map();
+  let prefsQueue=Promise.resolve();
   let store = new K.ContextStore(), rulesQueue = Promise.resolve(), persistQueue = Promise.resolve();
   const initialized = chrome.storage.session.get([SESSION, SESSION+'Dismissed']).then(d => { store = new K.ContextStore(d[SESSION] || []); for(const [id,url] of d[SESSION+'Dismissed']||[]) dismissed.set(id,url); }).catch(() => {});
   chrome.storage.session.setAccessLevel({ accessLevel: 'TRUSTED_CONTEXTS' }).catch(() => {});
@@ -61,7 +62,7 @@
     if (context && context.source.tabUrl !== K.pageURL(tab.url)) { store.clear(tab.id); context = null; void persist(); }
     if (generations.get(windowId) !== epoch || panels.get(windowId) !== port) return;
     post(port, { type: 'SC_STATE', state: { windowId, status, embedAllowed, enabled: prefs.enabled === true,
-      pageDismissed: !!tab && dismissed.has(tab.id), paused: paused.has(windowId), source: tab ? { tabId: tab.id, pageIdentity:tab.url, title: K.clean(tab.title), url: K.pageURL(tab.url), pattern } : null,
+      deduplicatePage:prefs.deduplicatePage!==false, pageDismissed: !!tab && dismissed.has(tab.id), paused: paused.has(windowId), source: tab ? { tabId: tab.id, pageIdentity:tab.url, title: K.clean(tab.title), url: K.pageURL(tab.url), pattern } : null,
       context: enabled && permitted ? context : null } });
     if (status !== 'ready') {
       if (tab) {
@@ -83,6 +84,18 @@
         await messageTab(tab.id, { type: 'SC_PAGE_STOP' });
       }
     } catch { post(port, { type: 'SC_ERROR', error: 'page_unavailable' }); }
+  }
+  async function ensurePage(windowId,m,port){
+    const answer={type:'SC_PAGE_SNAPSHOT_RESULT',requestId:m.requestId,ok:false};
+    try{
+      const tabId=activeTabs.get(windowId),tab=await chrome.tabs.get(tabId),epoch=tabEpochs.get(tabId)||0;
+      if(!tab.active||tab.url!==m.pageIdentity||paused.has(windowId)||dismissed.has(tabId)||!K.captureAllowed(tab.url))return;
+      const prefs=(await chrome.storage.local.get('__sakuraSidePrefsV1')).__sakuraSidePrefsV1||{};
+      if(prefs.enabled!==true||!await chrome.permissions.contains({origins:[K.originPattern(tab.url)]}))return;
+      const reply=await messageTab(tabId,{type:'SC_PAGE_SNAPSHOT'}),latest=await chrome.tabs.get(tabId);
+      if(!reply?.ok||reply.pageIdentity!==tab.url||latest.url!==tab.url||!latest.active||activeTabs.get(windowId)!==tabId||paused.has(windowId)||dismissed.has(tabId)||(tabEpochs.get(tabId)||0)!==epoch||panels.get(windowId)!==port)return;
+      answer.ok=true;answer.pageIdentity=tab.url;answer.context=store.get(tabId);
+    }catch{}finally{post(port,answer);}
   }
   async function close(windowId, port) {
     if (panels.get(windowId) !== port) return;
@@ -106,16 +119,23 @@
           if (old && old !== port) { try { old.disconnect(); } catch {} }
           await initialized; await setRules().catch(() => {}); await update(windowId);
         } else if (windowId !== null && m?.type === 'SC_PING') post(port, { type: 'SC_PONG' });
+        else if(windowId!==null&&m?.type==='SC_ENSURE_PAGE') { if(typeof m.requestId==='string'&&m.requestId.length<=80)await ensurePage(windowId,m,port); }
+        else if(windowId!==null&&m?.type==='SC_PAGE_PREFS'){
+          if(typeof m.deduplicatePage!=='boolean')return;
+          prefsQueue=prefsQueue.catch(()=>{}).then(async()=>{const d=await chrome.storage.local.get('__sakuraSidePrefsV1');await chrome.storage.local.set({__sakuraSidePrefsV1:{...d.__sakuraSidePrefsV1,deduplicatePage:m.deduplicatePage}});});
+          await prefsQueue;await update(windowId,false);
+        }
         else if (windowId !== null && m?.type === 'SC_REFRESH') { await setRules().catch(() => {}); await update(windowId); if(m.force) {const id=activeTabs.get(windowId); if(id!=null) await messageTab(id,{type:'SC_PAGE_REFRESH'});} }
         else if (windowId !== null && m?.type === 'SC_PAUSE') {
           if (m.value) { paused.add(windowId); store.clearWindow(windowId); await persist(); } else paused.delete(windowId);
           await update(windowId);
         } else if(windowId!==null && ['SC_DISMISS_PAGE','SC_RESTORE_PAGE'].includes(m?.type)) {
           const tabId=activeTabs.get(windowId),tab=await chrome.tabs.get(tabId);
+          if(m.pageIdentity&&m.pageIdentity!==tab.url)return;
           if(m.type==='SC_DISMISS_PAGE'){
-            const item=store.get(tabId);if(!item||item.id!==m.id)return;
-            dismissed.set(tabId,tab.url);item.page=null;
-            if(!item.selection)store.clear(tabId);
+            const item=store.get(tabId);if(m.id&&item&&item.id!==m.id)return;
+            dismissed.set(tabId,tab.url);if(item)item.page=null;
+            if(!item?.selection)store.clear(tabId);
             await messageTab(tabId,{type:'SC_PAGE_STOP'});
           }else dismissed.delete(tabId);
           await persist();await update(windowId,m.type==='SC_RESTORE_PAGE');
@@ -146,7 +166,8 @@
     if (!['SC_CAPTURE_HELLO','SC_PAGE_HELLO','SC_SELECTION','SC_SELECTION_CLEAR','SC_PAGE_CONTEXT','SC_CAPTURE_ERROR'].includes(m?.type)) return false;
     void (async () => {
       await initialized;
-      if (!await authorizedCapture(sender)) return { ok: false, enabled: false };
+      const incomingEpoch=tabEpochs.get(sender.tab?.id)||0;
+      if (!await authorizedCapture(sender)||(tabEpochs.get(sender.tab?.id)||0)!==incomingEpoch) return { ok: false, enabled: false };
       if (m.type === 'SC_CAPTURE_HELLO' || m.type === 'SC_PAGE_HELLO') return { ok: true, enabled: m.type==='SC_CAPTURE_HELLO'||!dismissed.has(sender.tab.id) };
       if(m.type==='SC_SELECTION_CLEAR'){
         const item=store.get(sender.tab.id);
@@ -166,6 +187,17 @@
       if (m.type === 'SC_PAGE_CONTEXT') {
         if (dismissed.has(sender.tab.id)) return {ok:false,enabled:false};
         if (sender.frameId !== 0) return { ok: false, enabled: false };
+        const current=await chrome.tabs.get(sender.tab.id).catch(()=>null);
+        if(!current||dismissed.has(sender.tab.id)||(tabEpochs.get(sender.tab.id)||0)!==incomingEpoch||m.pageIdentity&&m.pageIdentity!==current.url)return {ok:false,enabled:false};
+        if(typeof m.captureToken==='string'&&Number.isInteger(m.revision)){
+          const previous=sourceClocks.get(sender.tab.id);
+          if(previous&&previous.documentId===sender.documentId&&previous.url===current.url){
+            if(previous.token!==m.captureToken)return {ok:false};
+            if(previous.revision>=m.revision)return {ok:true,stale:true};
+          }
+          sourceClocks.set(sender.tab.id,{token:m.captureToken,revision:m.revision,documentId:sender.documentId,url:current.url});
+        }
+
         if (!String(m.text || '').trim()) {
           const previous = store.get(sender.tab.id);
           if(previous) {previous.page=null;if(!previous.selection)store.clear(sender.tab.id);}
@@ -183,10 +215,10 @@
   chrome.tabs.onActivated.addListener(({ windowId }) => { void update(windowId).catch(() => {}); });
   chrome.tabs.onUpdated.addListener((tabId, change, tab) => {
     if (!panels.has(tab.windowId)) return;
-    if (change.url || change.status === 'loading') { store.clear(tabId); void persist(); }
+    if (change.url || change.status === 'loading') { tabEpochs.set(tabId,(tabEpochs.get(tabId)||0)+1);sourceClocks.delete(tabId);store.clear(tabId); void persist(); }
     if (tab.active && (change.url || change.status === 'complete' || change.status === 'loading')) void update(tab.windowId, change.status !== 'loading').catch(() => {});
   });
-  chrome.tabs.onRemoved.addListener(tabId => { store.clear(tabId); void persist(); });
+  chrome.tabs.onRemoved.addListener(tabId => { sourceClocks.delete(tabId);tabEpochs.delete(tabId);store.clear(tabId); void persist(); });
   chrome.windows.onRemoved.addListener(windowId => { const p = panels.get(windowId); if (p) void close(windowId, p); });
   chrome.permissions.onAdded.addListener(() => { for (const w of panels.keys()) void setRules().then(() => update(w)).catch(() => {}); });
   chrome.permissions.onRemoved.addListener(() => { for (const w of panels.keys()) { store.clearWindow(w); void update(w).catch(() => {}); } void persist(); });

@@ -51,7 +51,7 @@ test('untrusted references cannot close delimiters or introduce new instructions
  assert.equal((text.match(/<Instruction>/g)||[]).length,1);assert.equal((text.match(/<UserRequest>/g)||[]).length,1);
  assert.ok(text.includes('&lt;/PageContext&gt;'));assert.ok(text.includes('&lt;/Selection&gt;'));
 });
-test('page reuse and new content never suppress the next reference',()=>{
+test('default serialization keeps Page; only explicit pageReuse may omit its repeated body',()=>{
  const c=context();assert.ok(K.serialize(c,'first').includes('<PageContext>'));
  assert.ok(K.serialize(c,'unrelated next',{pageAlreadyKnown:true}).includes('<PageContext>'));
  c.page.text+='\nUpdated page';assert.ok(K.serialize(c,'third').includes('Updated page'));
@@ -88,4 +88,11 @@ test('legacy combined evidence migrates without restoring cycle allowance',()=>{
 test('raw 6h 100 percent is accepted independently of 24h',()=>{
  const raw={generatedAt:new Date(start).toISOString(),nearTerm:{hours:6,probability:1},next24Hours:{probability:.1}};
  assert.equal(P.normalize(raw,start).h6,1);
+});
+
+test('page reuse retains active metadata and Selection target without repeating PageContext',()=>{
+ const c=context();c.selection={id:'s',text:'fetch(url)',capturedAt:Date.now()};
+ const text=K.serialize(c,'解释',{includePage:false,pageReuse:true});
+ assert.ok(text.includes('<Selection>\nfetch(url)'));assert.ok(!text.includes('<PageContext>'));assert.ok(text.includes('PageReference: active; unchanged'));assert.ok(text.endsWith('</PageMetadata>'));
+ const before=K.pageKey(c);c.source.title='New title';assert.notEqual(K.pageKey(c),before);
 });

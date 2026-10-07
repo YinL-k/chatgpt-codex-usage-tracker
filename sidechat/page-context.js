@@ -1,62 +1,53 @@
-/* Pre-capture only. Send handlers never read the source document. */
+/* Capture changes in the source page; verify a current snapshot before send. */
 (() => {
   'use strict';
   if (window.top !== window) return;
   if (globalThis.__sakuraPageContextV1) { globalThis.__sakuraPageContextV1.check(); return; }
-  let active=false, timer=0, idle=0, interval=0, observer=null, lastText='', lastURL='', lastAttempt=0, epoch=0, scheduledAt=0;
-  function send(m) {
-    try {
-      const runtime = globalThis.chrome?.runtime;
-      if (!runtime || typeof runtime.sendMessage !== 'function') return Promise.resolve({ ok:false });
-      return Promise.resolve(runtime.sendMessage(m)).catch(() => ({ ok:false }));
-    } catch { return Promise.resolve({ ok:false }); }
+  const captureToken=crypto.randomUUID();
+  let active=false,timer=0,interval=0,observer=null,lastText='',lastURL='',lastTitle='',epoch=0,scheduledAt=0,revision=0;
+  function send(m){try{return Promise.resolve(chrome.runtime.sendMessage(m)).catch(()=>({ok:false}));}catch{return Promise.resolve({ok:false});}}
+  function schedule(delay=200,force=false){
+    if(!active||document.hidden)return;
+    if(force){lastText='';clearTimeout(timer);timer=0;scheduledAt=0;}
+    const now=Date.now();scheduledAt ||= now;clearTimeout(timer);
+    timer=setTimeout(()=>{timer=scheduledAt=0;void capture();},Math.min(delay,Math.max(0,1000-(now-scheduledAt))));
   }
-  function schedule(delay=650,force=false) {
-    if(!active || document.hidden) return;
-    if(force) { lastText=''; clearTimeout(timer); timer=0; }
-    // Do not starve snapshots on a continuously changing/streaming page.
-    if(timer && Date.now()-scheduledAt > 1600) return;
-    clearTimeout(timer); scheduledAt ||= Date.now();
-    timer=setTimeout(() => {
-      timer=0; scheduledAt=0;
-      const run=() => { idle=0; void capture(); };
-      if(idle) { if(window.cancelIdleCallback) cancelIdleCallback(idle); idle=0; }
-      idle=window.requestIdleCallback ? requestIdleCallback(run,{timeout:600}) : 0;
-      if(!window.requestIdleCallback) run();
-    },Math.max(delay,1200-(Date.now()-lastAttempt)));
+  async function capture(force=false){
+    if(!active||document.hidden)return {ok:false};
+    const gen=epoch,url=location.href,title=document.title,seq=++revision;
+    try{
+      const result=SakuraPageExtract.extract(document,12000);
+      if(!active||gen!==epoch||url!==location.href)return {ok:false};
+      if(!force&&result.text===lastText&&url===lastURL&&title===lastTitle)return {ok:true};
+      const reply=await send({type:'SC_PAGE_CONTEXT',text:result.text,title,originalLength:result.originalLength,truncated:result.truncated,pageIdentity:url,captureToken,revision:seq});
+      if(!active||gen!==epoch||url!==location.href)return {ok:false};
+      if(reply?.ok&&seq===revision){lastText=result.text;lastURL=url;lastTitle=title;}
+      return {ok:reply?.ok===true,pageIdentity:url,captureToken,revision:seq};
+    }catch{return {ok:false};}
   }
-  async function capture() {
-    if(!active || document.hidden) return;
-    lastAttempt=Date.now(); const gen=epoch, url=location.href;
-    const result=SakuraPageExtract.extract(document,12000);
-    if(!active || gen!==epoch || url!==location.href || (result.text===lastText && url===lastURL)) return;
-    const reply=await send({type:'SC_PAGE_CONTEXT',text:result.text,title:document.title,originalLength:result.originalLength,truncated:result.truncated});
-    if(reply?.ok && gen===epoch && url===location.href) {lastText=result.text;lastURL=url;}
-  }
-  function visibility(){if(!document.hidden) schedule(60);}
-  function start() {
-    if(active) {schedule(60);return;}
-    active=true; epoch++; lastText=''; lastURL='';
-    observer=new MutationObserver(records => {
-      if(records.some(r => !r.target.parentElement?.closest('[data-sakura-sidechat],nav,aside,button,textarea,[contenteditable="true"]'))) schedule(700);
-    });
-    if(document.documentElement) observer.observe(document.documentElement,{childList:true,subtree:true,characterData:true,attributes:true,attributeFilter:['hidden','aria-hidden','checked','aria-checked','disabled','aria-disabled']});
+  function visibility(){if(!document.hidden)schedule(0);}
+  function start(){
+    if(active){schedule(0);return;}
+    active=true;epoch++;lastText=lastURL=lastTitle='';
+    observer=new MutationObserver(records=>{if(records.some(r=>!(r.target instanceof Element?r.target:r.target.parentElement)?.closest('[data-sakura-sidechat],nav,aside,textarea,[contenteditable="true"]')))schedule();});
+    if(document.documentElement)observer.observe(document.documentElement,{childList:true,subtree:true,characterData:true,attributes:true,attributeFilter:['hidden','aria-hidden','checked','aria-checked','disabled','aria-disabled','selected','aria-selected','aria-label','class','style']});
     document.addEventListener('visibilitychange',visibility);document.addEventListener('change',visibility);
-    interval=setInterval(() => schedule(location.href===lastURL ? 300 : 40),5000);
-    schedule(40);
+    addEventListener('popstate',visibility);addEventListener('hashchange',visibility);
+    interval=setInterval(()=>schedule(0),5000);schedule(0);
   }
-  function stop() {
+  function stop(){
     active=false;epoch++;clearTimeout(timer);clearInterval(interval);timer=interval=scheduledAt=0;
-    if(idle && window.cancelIdleCallback) cancelIdleCallback(idle);idle=0;
-    observer?.disconnect();observer=null;document.removeEventListener('visibilitychange',visibility);document.removeEventListener('change',visibility);lastText='';
+    observer?.disconnect();observer=null;document.removeEventListener('visibilitychange',visibility);document.removeEventListener('change',visibility);
+    removeEventListener('popstate',visibility);removeEventListener('hashchange',visibility);lastText='';
   }
   async function check(){const r=await send({type:'SC_PAGE_HELLO'});if(r?.ok&&r.enabled)start();else stop();}
-  chrome.runtime.onMessage.addListener((m,s,reply) => {
+  chrome.runtime.onMessage.addListener((m,s,reply)=>{
     if(s.id!==chrome.runtime.id)return;
     if(m?.type==='SC_PAGE_START'){start();reply({ok:true});}
     if(m?.type==='SC_PAGE_STOP'){stop();reply({ok:true});}
-    if(m?.type==='SC_PAGE_REFRESH'){schedule(30,true);reply({ok:true});}
+    if(m?.type==='SC_PAGE_REFRESH'){schedule(0,true);reply({ok:true});}
+    if(m?.type==='SC_PAGE_SNAPSHOT'){void capture(true).then(reply,()=>reply({ok:false}));return true;}
   });
-  addEventListener('pagehide',stop);addEventListener('pageshow',() => void check());
+  addEventListener('pagehide',stop);addEventListener('pageshow',()=>void check());
   globalThis.__sakuraPageContextV1={check};void check();
 })();

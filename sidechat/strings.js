@@ -65,5 +65,7 @@
     localFoldNote: '\u4ec5\u6298\u53e0\u672c\u5730\u663e\u793a\uff0c\u5b8c\u6574\u5f15\u7528\u4ecd\u5728\u5df2\u53d1\u9001\u6d88\u606f\u4e2d\u3002',
     contextNotReady: '\u7f51\u9875\u4e0a\u4e0b\u6587\u5c1a\u672a\u5c31\u7eea\uff0c\u672c\u6761\u6d88\u606f\u6cbf\u7528\u5df2\u6709\u5bf9\u8bdd\u3002'
   });
+  Object.assign(en,{captureNote:'Active only while this panel is open. Reads rendered page text, not passwords or form input values. Selection is the explicit target.',pageReferenceLabel:'Page reference',deduplicatePageLabel:'Deduplicate page',pageReferenceNote:'Keep referencing this page until you turn it off. Selection stays independent.',deduplicatePageNote:'Reuse unchanged page context. Changes refresh the reference for your next message.',freshnessError:'The latest page snapshot could not be read. Your draft is kept; try sending again.',quoteNote:'Page stays referenced until you close it. Unchanged content may reuse the previous reference. Selection is the explicit target.'});
+  Object.assign(zh,{captureNote:'仅在侧边栏打开时读取已渲染网页内容，不读取密码或表单输入值。Selection 始终是明确目标。',pageReferenceLabel:'Page reference',deduplicatePageLabel:'Deduplicate page',pageReferenceNote:'开启时持续引用当前网页；关闭不影响 Selection。',deduplicatePageNote:'省略重复页面内容；页面变化会更新引用，在下一条消息中附带。',freshnessError:'未能读取最新网页快照，草稿已保留，请重试发送。',quoteNote:'网页会持续引用，直到你关闭它。未变化的内容可沿用已发送引用；Selection 始终是明确目标。'});
   globalThis.SakuraSideStrings = { en, zh };
 })();

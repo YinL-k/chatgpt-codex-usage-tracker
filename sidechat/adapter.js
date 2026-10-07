@@ -1,12 +1,13 @@
-/* Our iframe only. Trusted native sends + non-blocking, per-message receipts.
-   No model API calls, synthetic second click, or previous-send lock. */
+/* Our iframe only. Native sends with per-message receipts.
+   Active Page sends check freshness before replaying the original send once. */
 (() => {
   'use strict';
   const origin=chrome.runtime.getURL('').replace(/\/$/,'');
   if(window.top===window||location.origin!=='https://chatgpt.com'||location.ancestorOrigins?.[0]!==origin)return;
   if(globalThis.__sakuraChatAdapterV1)return;globalThis.__sakuraChatAdapterV1=true;
   const K=SakuraSideCore,R=SakuraModelResolver,bridgeID=crypto.randomUUID(),SELECTOR='[data-message-author-role="user"]',MODEL_SOURCE='SAKURA_MODEL_OBSERVER_V2';
-  let dismissedSource='',captureSource='',pageDismissed=false;
+  let dismissedSource='',captureSource='',pageDismissed=false,deduplicatePage=true,pendingSend=null,replaying=false,ledgerEpoch=0;
+  const pageLedger=new Map();
   let port=null,context=null,labels={},theme='dark',captureStatus='',prepared={},statusLast='',lastAnnounce=0;
   let queued=0,writing=false,editorLast=null,rawRoute=location.pathname,route=chatID()||'draft:'+crypto.randomUUID();
   let lastPrepared='',disposed=false,observer=null,recentRequest=null;
@@ -245,7 +246,7 @@
     if(rawRoute===location.pathname)return;
     const previous=route,nextID=chatID();
     if(previous.startsWith('draft:')&&nextID&&receipts.some(r=>r.route===previous&&Date.now()-r.at<30000)){
-      route=nextID;
+      route=nextID;if(pageLedger.has(previous)){pageLedger.set(route,pageLedger.get(previous));pageLedger.delete(previous);}
       for(const r of receipts)if(r.route===previous)r.route=route;
     }else route=nextID||'draft:'+crypto.randomUUID();
     rawRoute=location.pathname;lastPrepared='';
@@ -277,7 +278,33 @@
     if(key===lastPrepared)return;lastPrepared=key;
     prepared={full:K.prepare(context),page:K.prepare(context,{includeSelection:false}),focus:K.prepare(context,{includePage:false})};
   }
-  const view=SakuraSideView.create({composer,translate:t,onDismiss:item=>{dismissedSource=captureSource;pageDismissed=true;context={...item,page:null};post({type:'SC_DISMISS_PAGE',id:item.id});rebuild();render();},onRestore:()=>{dismissedSource='';pageDismissed=false;post({type:'SC_RESTORE_PAGE'});},onClear:item=>{
+  function clearPageLedger(){pageLedger.clear();ledgerEpoch++;}
+  function cancelPending(){if(pendingSend){clearTimeout(pendingSend.timer);pendingSend=null;}}
+  function setPageReference(value){
+    cancelPending();clearPageLedger();
+    if(value){dismissedSource='';pageDismissed=false;post({type:'SC_RESTORE_PAGE'});}
+    else{dismissedSource=captureSource;pageDismissed=true;const id=context?.id;if(context)context={...context,page:null};post({type:'SC_DISMISS_PAGE',id,pageIdentity:captureSource});}
+    rebuild();render();
+  }
+  function completeSnapshot(m){
+    const request=pendingSend;if(!request||request.id!==m.requestId)return;
+    clearTimeout(request.timer);pendingSend=null;syncRoute();
+    if(disposed||pageDismissed||captureSource!==request.source||route!==request.route||composer()!==request.editor||read(request.editor)!==request.question||request.cancelled)return;
+    if(!m.ok||m.pageIdentity!==request.source){post({type:'SC_ERROR',key:'freshnessError'});return;}
+    context=K.validContext(m.context)?m.context:null;
+    if(context?.selection&&receipts.some(r=>r.observed&&r.contextId===context.id&&r.selectionKey===K.selectionKey(context)))context={...context,selection:null};
+    rebuild();render();
+    const button=sendButton(request.editor);if(!button||disabled(button))return;
+    replaying=true;try{button.click();}finally{replaying=false;}
+  }
+  function checkSnapshot(event,el,question){
+    event.preventDefault();event.stopImmediatePropagation();
+    if(pendingSend)return;
+    const id=crypto.randomUUID(),request={id,editor:el,question,route,source:captureSource,cancelled:false};
+    pendingSend=request;request.timer=setTimeout(()=>completeSnapshot({requestId:id,ok:false}),2000);
+    post({type:'SC_ENSURE_PAGE',requestId:id,pageIdentity:captureSource});
+  }
+  const view=SakuraSideView.create({composer,translate:t,onDismiss:()=>setPageReference(false),onRestore:()=>setPageReference(true),onClear:item=>{
     post({type:'SC_CLEAR',id:item.id,selectionKey:K.selectionKey(item)});
     if(context?.id===item.id)context={...context,selection:null};rebuild();render();
   }});
@@ -294,6 +321,7 @@
     const el=composer(),question=read(el);
     if(!el||!question.trim()||disabled(sendButton(el)))return; // Never override ChatGPT's generation/IME controls.
     syncRoute();rebuild();
+    if(!replaying&&!pageDismissed&&captureSource&&captureStatus==='ready'){checkSnapshot(event,el,question);return;}
     // Capture -> native submit is one event chain. A user retry of the same
     // rewritten draft also proceeds unchanged, with no duplicate wrapper.
     if(receipts.some(r=>r.route===route&&!r.observed&&!r.consumed&&r.editor===el&&r.expectedNorm===norm(question)))return;
@@ -302,12 +330,14 @@
     const selectionInFlight=selected&&receipts.some(r=>r.route===route&&!r.failed&&r.selectionKey===selected&&(r.observed||now-r.at<provisionalTTL));
     const usePage=valid&&!pageDismissed&&K.validPage(context.page);
     const useSelection=valid&&K.validSelection(context.selection)&&!selectionInFlight;
-    let variant=usePage?(useSelection?prepared.full:prepared.page):(useSelection?prepared.focus:null);
+    const version=usePage?JSON.stringify([captureSource,K.pageKey(context)]):'';
+    const reuse=usePage&&deduplicatePage&&pageLedger.get(route)?.version===version;
+    const variant=reuse?K.prepare(context,{includePage:false,includeSelection:useSelection,pageReuse:true}):usePage?(useSelection?prepared.full:prepared.page):(useSelection?prepared.focus:null);
     const id=crypto.randomUUID(),marker=variant?.body?'SAKURA_CONTEXT_'+id.replaceAll('-',''):'';
     const expected=K.wrap(question,variant,id);
     const nodes=document.querySelectorAll(SELECTOR),tail=nodes[nodes.length-1]||null;
     const r={id,at:now,route,editor:el,question,expected,expectedNorm:norm(expected),marker,tail,observed:false,counted:false,consumed:false,
-      pageKey:variant?.pageKey||'',selectionKey:variant?.selectionKey||'',contextId:context?.id||'',
+      pageKey:variant?.pageKey||'',pageVersion:variant?.hasPage?version:'',pageEpoch:ledgerEpoch,selectionKey:variant?.selectionKey||'',contextId:context?.id||'',
       domModel:modelLabel(),domEffort:effortLabel(),request:(recentRequest&&recentRequest.at>=now-250&&recentRequest.at-now<7000?recentRequest:null)};
     try{
       if(expected!==question){writing=true;setText(el,expected);writing=false;}
@@ -378,7 +408,13 @@
       if(r.observed){
         // React can replace a message node. Reattach only with our own known marker.
         if(!r.node?.isConnected&&r.marker){r.node=candidates.find(n=>(n.textContent||'').includes(r.marker))||r.node;view.fold(r.node,r);}
-        if(r.node?.isConnected){void count(r);if(failed(r.node)){r.failed=true;view.reveal(r.node);}}
+        if(r.node?.isConnected){
+          if(failed(r.node)){r.failed=true;view.reveal(r.node);if(pageLedger.get(r.route)?.receiptId===r.id)pageLedger.delete(r.route);}
+          else if(r.pageVersion&&r.pageEpoch===ledgerEpoch&&!r.failed&&!r.pageConfirmed&&now-r.observedAt>=350&&norm(draft)!==r.expectedNorm){
+            const prior=pageLedger.get(r.route);if(!prior||prior.at<=r.at)pageLedger.set(r.route,{version:r.pageVersion,receiptId:r.id,at:r.at});r.pageConfirmed=true;
+          }
+          void count(r);
+        }
       }
     }
     for(let i=receipts.length-1;i>=0;i--)if(now-receipts[i].at>receiptTTL){receipts.splice(i,1);}
@@ -391,7 +427,12 @@
     port?.close();port=e.ports[0];
     port.onmessage=event=>{
       const m=event.data;
+      if(m?.type==='SC_PAGE_SNAPSHOT_RESULT'){completeSnapshot(m);return;}
+      if(m?.type==='SC_PAGE_REFERENCE'){setPageReference(m.value===true);return;}
+      if(m?.type==='SC_FORGET_PAGE'){clearPageLedger();return;}
       if(m?.type!=='SC_UPDATE')return;
+      const nextDedupe=m.deduplicatePage!==false;if(nextDedupe!==deduplicatePage){deduplicatePage=nextDedupe;clearPageLedger();cancelPending();}
+      const nextSource=m.source?.pageIdentity||m.source?.url||'';if(captureSource!==nextSource)cancelPending();
       captureSource=m.source?.pageIdentity||m.source?.url||'';
       if(dismissedSource && captureSource!==dismissedSource)dismissedSource='';
       pageDismissed=!!m.pageDismissed||!!dismissedSource;
@@ -409,13 +450,13 @@
     });
     observer.observe(document.documentElement,{subtree:true,childList:true,attributes:true,attributeFilter:['data-message-id','data-message-status']});
     document.addEventListener('input',e=>{
-      if(!writing){const el=composer();if(el&&(el===e.target||el.contains(e.target)))for(const r of receipts)if(r.editor===el)r.consumed=true;}
+      if(!writing){const el=composer();if(pendingSend&&(el===e.target||el?.contains(e.target)))pendingSend.cancelled=true;if(el&&(el===e.target||el.contains(e.target)))for(const r of receipts)if(r.editor===el)r.consumed=true;}
       schedule();
     },true);
   }
   if(document.documentElement)observe();else document.addEventListener('DOMContentLoaded',observe,{once:true});
   if(document.body)ensureNativeBar();else document.addEventListener('DOMContentLoaded',ensureNativeBar,{once:true});
   const timer=setInterval(()=>{announce();if(receipts.length||editorLast!==composer()||rawRoute!==location.pathname){editorLast=composer();schedule();}},500);
-  window.addEventListener('pagehide',()=>{disposed=true;clearInterval(timer);clearTimeout(queued);observer?.disconnect();context=null;receipts.length=0;port?.close();});
+  window.addEventListener('pagehide',()=>{disposed=true;cancelPending();clearPageLedger();clearInterval(timer);clearTimeout(queued);observer?.disconnect();context=null;receipts.length=0;port?.close();});
   announce();
 })();
