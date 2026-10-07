@@ -1,4 +1,4 @@
-# SakuraMeter 3.6.0.61 - Privacy and behavior
+# SakuraMeter 3.6.0.62 - Privacy and behavior
 
 Side Chat is optional and separate from the existing local usage tracker. There is no added developer backend, telemetry or model proxy.
 
@@ -20,7 +20,7 @@ A first-party presentation layer folds only locally generated reference messages
 
 ## Embedding and permissions
 
-The required permissions are: storage, tabs, sidePanel, scripting, declarativeNetRequestWithHostAccess, and the ChatGPT host. Other HTTP(S) site access is optional (current site or all sites).
+The required permissions are: storage, tabs, sidePanel, scripting, declarativeNetRequestWithHostAccess, alarms, notifications, and the ChatGPT host. Other HTTP(S) site access is optional (current site or all sites). `alarms` schedules background reset-forecast checks. `notifications` displays browser/OS alerts only when the configured reset-notification logic decides to notify; disabling reset notifications prevents those alerts but does not remove the manifest permission.
 
 While at least one Side Chat panel is open, an existing session rule removes frame-blocking response headers from chatgpt.com sub-frame responses. It is scoped by destination and resource type, NOT by a single iframe initiator: other matching ChatGPT embeds can be affected while the panel is open. It does not alter top-level pages or unrelated domains. The rule is removed when the last panel closes. This scope remains unchanged.
 
@@ -30,7 +30,7 @@ The existing usage core and export schema are unchanged. Usage events contain on
 
 ## Test boundary
 
-Only offline synthetic DOM/Chrome-API tests were performed here. No real account was used and no real user/model message was sent by the tests. Current ChatGPT UI compatibility needs local testing.
+Automated verification for 3.6.0.62 includes 71/71 Node unit/background-integration tests and dedicated browser regressions using local pages, fixtures, and simulated Chrome APIs. No real account was used by those tests and no real user/model message was sent. Real logged-in ChatGPT session behavior and actual browser/operating-system notification display still require human acceptance and have not been claimed as verified.
 
 ## Context serialization
 

@@ -4,7 +4,7 @@ English | [中文](README.md)
 
 ![SakuraMeter](assets/sakurameter-128.png)
 
-**3.6.0.61**
+**3.6.0.62**
 
 A Chrome extension for local ChatGPT activity tracking, heatmaps, trends, and read-only Codex allowance information. Sakura dark and pale-pink themes share the same layout and interactions.
 
@@ -27,6 +27,7 @@ Six English store screenshots are shown below.
 - Consistent membership rows, compact Live badges, themed dropdowns and date/time picker, keyboard navigation, and reduced-motion support.
 - Read-only refresh using the existing ChatGPT session, dynamic Codex windows, timeout/backoff, and cached/error states. No chat submission, generation, or automatic page reload.
 - Experimental third-party global reset forecasts from codex-reset.com, distinct from personal reset times and official promises.
+- Reset forecast notifications run scheduled background checks; `alarms` schedules those checks and `notifications` displays browser/OS alerts when the selected threshold is met. Notifications can be disabled or set to Standard / Low sensitivity under Usage → Advanced.
 - **Side Chat** is an optional side-panel chat experience that uses your existing ChatGPT session. While the panel is open and a site is authorized, SakuraMeter can read visible page text and include text you explicitly highlight as higher-priority context in the next message. Page context can be paused and site access can be revoked at any time. It adds no developer backend, telemetry, or model proxy.
 
 ## Install and update
@@ -37,7 +38,7 @@ Export activity and back up the existing extension directory before updating. Re
 
 ## Privacy and permissions
 
-Activity remains local. Chat text is briefly compared in memory to confirm a send, never persisted or exported. Authentication tokens remain in request-local memory. Required permissions are `storage`, `tabs`, `sidePanel`, `scripting`, `declarativeNetRequestWithHostAccess`, plus the `https://chatgpt.com/*` host permission. Access to other HTTP(S) sites is **optional** and is requested only for Side Chat page context when you authorize the current site or all sites. `sidePanel` provides the Side Chat surface, `scripting` runs the local context helper on authorized pages, and `declarativeNetRequestWithHostAccess` is used only while Side Chat is open to manage the response-header rule required for the ChatGPT sub-frame. Page context can be paused and site access can be revoked at any time.
+Activity remains local. Chat text is briefly compared in memory to confirm a send, never persisted or exported. Authentication tokens remain in request-local memory. Required permissions are `storage`, `tabs`, `sidePanel`, `scripting`, `declarativeNetRequestWithHostAccess`, `alarms`, and `notifications`, plus the `https://chatgpt.com/*` host permission. Access to other HTTP(S) sites is **optional** and is requested only for Side Chat page context when you authorize the current site or all sites. `sidePanel` provides the Side Chat surface, `scripting` runs the local context helper on authorized pages, and `declarativeNetRequestWithHostAccess` is used only while Side Chat is open to manage the response-header rule required for the ChatGPT sub-frame. `alarms` schedules background reset-forecast checks, and `notifications` displays browser/OS alerts when a configured notification condition is met. Page context can be paused and site access can be revoked at any time.
 
 Personal usage uses GET requests to ChatGPT session and usage endpoints. Public forecasts use credential-free GET requests; the forecast provider receives normal connection metadata such as IP address. No developer backend, telemetry, conversation creation, or model calls. See [Privacy](PRIVACY.md).
 
@@ -45,7 +46,7 @@ Unknown quotas remain unavailable. Calibrated Pro balances are local estimates. 
 
 ## Tests
 
-Historical automated verification is preserved in the [3.5.0 verification report](verification/3.5.0/report.json). Before publishing 3.6.0.61, the release package was audited for version consistency, JavaScript/JSON syntax, resource references, and extension package structure. See [TESTING.md](TESTING.md) for historical development and verification records.
+Historical automated verification is preserved in the [3.5.0 verification report](verification/3.5.0/report.json). SakuraMeter 3.6.0.62 passes 71/71 Node unit and background-integration tests plus dedicated browser regressions for Page/Selection behavior, Popup/Dashboard flows, and the iframe send adapter, along with version, JavaScript/JSON syntax, resource-reference, and package-structure checks. Those browser tests use local pages, fixtures, and simulated `chrome.*` APIs; they do not replace human acceptance. Real logged-in ChatGPT sessions and actual browser/OS notification display have not yet been human-verified. See [TESTING.md](TESTING.md) for historical development and verification records.
 
 
 ## Brand and icon

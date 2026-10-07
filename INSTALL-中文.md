@@ -1,15 +1,19 @@
-# SakuraMeter 3.6.0.61 安装说明
+# SakuraMeter 3.6.0.62 安装说明
 
 1. 打开 Chrome 的 `chrome://extensions`。
 2. 开启“开发者模式”。
 3. 点击“加载已解压的扩展程序”，选择包含 `manifest.json` 的源码目录，无需重新打包 ZIP。
 4. 安装后，刷新需要使用的 ChatGPT 页面，让新版脚本生效。
+5. 确认扩展详情中的必需权限包含 `alarms` 与 `notifications`；`alarms` 用于后台定时检查公开重置预测，`notifications` 用于满足阈值时显示浏览器/系统通知。
+6. 打开 Dashboard → Usage → Advanced，可关闭 Reset notifications，或选择 Standard / Low sensitivity。
 
 本次交付没有执行安装。如需由助手操作安装，需先单独确认。
 
 扩展存储按扩展 ID 隔离：如果旧版本已经安装，请先从旧版本导出活动备份。不要先卸载旧版本。加载新路径可能得到不同 ID，因此不会自动继承旧 ID 的计划和校准。若需要完整原位升级，应保留旧扩展 ID/安装路径并先备份；本交付不改动旧目录。活动 JSON 导入只合并日期统计，不携带手动计划和校准。
 
-允许的网络行为：使用已登录 ChatGPT 页面的会话，在内存中读取认证信息，只读 GET 获取 usage。无聊天提交、模型生成、POST、开发者后台或遥测。Overview 另以无认证 GET 读取 codex-reset.com 的公开预测。详细说明见 README.md 与 PRIVACY.md。
+允许的网络行为：使用已登录 ChatGPT 页面的会话，在内存中读取认证信息，只读 GET 获取 usage。无聊天提交、模型生成、POST、开发者后台或遥测。Overview 与重置通知逻辑另以无认证 GET 读取 codex-reset.com 的公开预测；浏览器后台由 `alarms` 调度检查，达到通知条件时由 `notifications` 显示提醒。详细说明见 README.md 与 PRIVACY.md。
+
+3.6.0.62 已通过 71/71 Node 测试和专项浏览器回归，但这些验证使用本地页面/夹具，不能替代真人验收。真实登录 ChatGPT 会话，以及浏览器/操作系统实际通知展示，仍需在安装后的真实环境中人工确认。
 
 ## 已安装用户更新
 
