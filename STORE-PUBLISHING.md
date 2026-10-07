@@ -79,3 +79,9 @@ bash -n .github/scripts/chrome-store-publish.sh .github/scripts/edge-store-publi
 For offline package verification, run `python3 .github/scripts/release-package.py build --tag v<manifest-version> --output <temporary-directory>`. This only writes a local ZIP; it does not create a Git tag or GitHub Release. The release workflow itself builds its production ZIP once; consumers only download and verify it.
 
 Live OAuth exchange, publisher access, Edge API-key validity and actual review submission cannot be validated without the real store accounts/credentials. Configure the two secrets and six variables above, then validate those steps on the next intentional version/tag release.
+
+## Account configuration verified on 2026-10-07
+
+Both YinL-k/chatgpt-codex-usage-tracker and YinL-k/Pixiv-Bookmark-Random use the same publisher service account and Edge Publish API account, with separate extension/product ID variables. The account credentials can manage all extensions belonging to the publisher; repository variables select the intended item. Two Secrets and six Variables are required in each repository. No Google Cloud project roles were granted.
+
+Chrome OAuth authentication and read-only fetchStatus succeeded for both items. Actual upload/review submission was not run. Edge credentials were generated and stored using GitHub secret encryption; no live Edge submission was attempted. The current Edge key expires on 2026-12-18: rotate it in Partner Center before expiry and update EDGE_API_KEY in both repositories. Store listing/privacy changes remain manual.
