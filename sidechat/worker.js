@@ -3,13 +3,14 @@
   'use strict';
   const K = SakuraSideCore, SESSION = '__sakuraSideContextsV1', RULE = 73001;
   const panels = new Map(), activeTabs = new Map(), paused = new Set(), generations = new Map();
+  const dismissed = new Map();
   let store = new K.ContextStore(), rulesQueue = Promise.resolve(), persistQueue = Promise.resolve();
-  const initialized = chrome.storage.session.get(SESSION).then(d => { store = new K.ContextStore(d[SESSION] || []); }).catch(() => {});
+  const initialized = chrome.storage.session.get([SESSION, SESSION+'Dismissed']).then(d => { store = new K.ContextStore(d[SESSION] || []); for(const [id,url] of d[SESSION+'Dismissed']||[]) dismissed.set(id,url); }).catch(() => {});
   chrome.storage.session.setAccessLevel({ accessLevel: 'TRUSTED_CONTEXTS' }).catch(() => {});
   const ownedUI = s => s.id === chrome.runtime.id && s.url === chrome.runtime.getURL('sidechat/panel.html');
   const ownedPage = s => s.id === chrome.runtime.id && !!s.tab && K.captureAllowed(s.url);
   const messageTab = (id, m) => chrome.tabs.sendMessage(id, m).catch(() => null);
-  const persist = () => { persistQueue = persistQueue.then(() => chrome.storage.session.set({ [SESSION]: store.list() })).catch(() => {}); return persistQueue; };
+  const persist = () => { persistQueue = persistQueue.then(() => chrome.storage.session.set({ [SESSION]: store.list(), [SESSION+'Dismissed']: [...dismissed] })).catch(() => {}); return persistQueue; };
   function post(port, message) { try { port.postMessage(message); } catch {} }
   async function hasEmbed() { return true; }
   function setRules() {
@@ -54,11 +55,13 @@
     const prefs = (await chrome.storage.local.get('__sakuraSidePrefsV1')).__sakuraSidePrefsV1 || {};
     const enabled = !paused.has(windowId) && prefs.enabled === true;
     const status = !supported ? 'restricted' : !enabled ? 'paused' : !permitted ? 'access-needed' : 'ready';
+    if(tab && dismissed.has(tab.id) && dismissed.get(tab.id)!==tab.url){dismissed.delete(tab.id);void persist();}
     let context = tab ? store.get(tab.id) : null;
+    if(context && dismissed.has(tab.id)) context={...context,page:null};
     if (context && context.source.tabUrl !== K.pageURL(tab.url)) { store.clear(tab.id); context = null; void persist(); }
     if (generations.get(windowId) !== epoch || panels.get(windowId) !== port) return;
     post(port, { type: 'SC_STATE', state: { windowId, status, embedAllowed, enabled: prefs.enabled === true,
-      paused: paused.has(windowId), source: tab ? { tabId: tab.id, title: K.clean(tab.title), url: K.pageURL(tab.url), pattern } : null,
+      pageDismissed: !!tab && dismissed.has(tab.id), paused: paused.has(windowId), source: tab ? { tabId: tab.id, pageIdentity:tab.url, title: K.clean(tab.title), url: K.pageURL(tab.url), pattern } : null,
       context: enabled && permitted ? context : null } });
     if (status !== 'ready') {
       if (tab) {
@@ -74,7 +77,7 @@
       await chrome.scripting.executeScript({ target: { tabId: tab.id }, files: ['sidechat/extractor.js', 'sidechat/page-context.js'] });
       if (panels.get(windowId) === port && activeTabs.get(windowId) === tab.id && !paused.has(windowId)) {
         await messageTab(tab.id, { type: 'SC_CAPTURE_START' });
-        await messageTab(tab.id, { type: 'SC_PAGE_START' });
+        await messageTab(tab.id, { type: dismissed.has(tab.id)?'SC_PAGE_STOP':'SC_PAGE_START' });
       } else {
         await messageTab(tab.id, { type: 'SC_CAPTURE_STOP' });
         await messageTab(tab.id, { type: 'SC_PAGE_STOP' });
@@ -107,6 +110,15 @@
         else if (windowId !== null && m?.type === 'SC_PAUSE') {
           if (m.value) { paused.add(windowId); store.clearWindow(windowId); await persist(); } else paused.delete(windowId);
           await update(windowId);
+        } else if(windowId!==null && ['SC_DISMISS_PAGE','SC_RESTORE_PAGE'].includes(m?.type)) {
+          const tabId=activeTabs.get(windowId),tab=await chrome.tabs.get(tabId);
+          if(m.type==='SC_DISMISS_PAGE'){
+            const item=store.get(tabId);if(!item||item.id!==m.id)return;
+            dismissed.set(tabId,tab.url);item.page=null;
+            if(!item.selection)store.clear(tabId);
+            await messageTab(tabId,{type:'SC_PAGE_STOP'});
+          }else dismissed.delete(tabId);
+          await persist();await update(windowId,m.type==='SC_RESTORE_PAGE');
         } else if (windowId !== null && m?.type === 'SC_CLEAR') {
           const tabId = activeTabs.get(windowId); store.clearSelection(tabId, m.id, m.selectionKey); await persist();
           if (tabId != null) await messageTab(tabId, { type: 'SC_CAPTURE_RESET' });
@@ -131,11 +143,16 @@
     port.onDisconnect.addListener(() => { if (windowId !== null) void close(windowId, port); });
   });
   chrome.runtime.onMessage.addListener((m, sender, reply) => {
-    if (!['SC_CAPTURE_HELLO','SC_PAGE_HELLO','SC_SELECTION','SC_PAGE_CONTEXT','SC_CAPTURE_ERROR'].includes(m?.type)) return false;
+    if (!['SC_CAPTURE_HELLO','SC_PAGE_HELLO','SC_SELECTION','SC_SELECTION_CLEAR','SC_PAGE_CONTEXT','SC_CAPTURE_ERROR'].includes(m?.type)) return false;
     void (async () => {
       await initialized;
       if (!await authorizedCapture(sender)) return { ok: false, enabled: false };
-      if (m.type === 'SC_CAPTURE_HELLO' || m.type === 'SC_PAGE_HELLO') return { ok: true, enabled: true };
+      if (m.type === 'SC_CAPTURE_HELLO' || m.type === 'SC_PAGE_HELLO') return { ok: true, enabled: m.type==='SC_CAPTURE_HELLO'||!dismissed.has(sender.tab.id) };
+      if(m.type==='SC_SELECTION_CLEAR'){
+        const item=store.get(sender.tab.id);
+        if(item?.selection?.frameId===sender.frameId && m.selectionKey)store.clearSelection(sender.tab.id,m.id,m.selectionKey);
+        await persist();await update(sender.tab.windowId,false);return {ok:true};
+      }
       if (m.type === 'SC_CAPTURE_ERROR') {
         if (m.error === 'selection_too_long') {
           store.clear(sender.tab.id); await persist(); await update(sender.tab.windowId, false);
@@ -147,6 +164,7 @@
         windowId: sender.tab.windowId, frameId: sender.frameId, documentId: sender.documentId };
       let item;
       if (m.type === 'SC_PAGE_CONTEXT') {
+        if (dismissed.has(sender.tab.id)) return {ok:false,enabled:false};
         if (sender.frameId !== 0) return { ok: false, enabled: false };
         if (!String(m.text || '').trim()) {
           const previous = store.get(sender.tab.id);
@@ -157,7 +175,8 @@
       } else {
         item = store.setSelection(m.text, source);
       }
-      await persist(); await update(sender.tab.windowId, false); return { ok: true, id: item.id };
+      const receipt={ok:true,id:item.id,selectionKey:K.selectionKey(item)};
+      await persist(); await update(sender.tab.windowId, false); return receipt;
     })().then(reply, e => reply({ ok: false, error: K.clean(e.message, 80) }));
     return true;
   });

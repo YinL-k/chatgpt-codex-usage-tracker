@@ -3,7 +3,7 @@
    Only message id + model/tier/effort metadata leave the page; prompt content is never read or stored here. */
 (()=>{
   'use strict';
-  const BRIDGE_VERSION='3.6.0.61';
+  const BRIDGE_VERSION='3.6.0.62';
   // Never trust an old sentinel after an unpacked-extension reload. A prior
   // isolated-world listener can survive while its chrome.runtime is invalid.
   try{globalThis.__sakuraUsageNetworkBridgeCleanupV31?.();}catch{}

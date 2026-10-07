@@ -5,13 +5,7 @@
   function layoutNotice(){
     const n=document.getElementById('actionStatus'),art=document.getElementById('artboard');
     if(!art||!n?.classList.contains('popup-notice'))return;
-    const shell=art.querySelector('.shell'),viewport=document.getElementById('viewport');
-    if(!shell.dataset.noticeBaseHeight)shell.dataset.noticeBaseHeight=String(shell.offsetHeight);
-    const height=n.hidden?0:n.offsetHeight+20;
-    document.body.classList.toggle('has-popup-notice',height>0);
-    art.style.setProperty('--notice-shift',height+'px');
-    art.style.height=(1672+height)+'px';shell.style.height=(Number(shell.dataset.noticeBaseHeight)+height)+'px';
-    viewport.style.height=((1672+height)*338/941)+'px';
+    art.querySelector('.membership')?.classList.toggle('has-inline-notice',!n.hidden);
   }
   function clear(){
     const n=document.getElementById('actionStatus');if(!n)return;
@@ -44,8 +38,8 @@
       let n=document.getElementById('actionStatus');
       if(!n){
         n=document.createElement('section');n.id='actionStatus';n.className='action-status popup-notice';n.setAttribute('role','status');n.setAttribute('aria-live','polite');
-        n.innerHTML='<div class="notice-heading"><span class="notice-symbol" aria-hidden="true">i</span><strong class="notice-title"></strong><button type="button" class="notice-close">×</button></div><p class="notice-message"></p><div class="notice-actions"><button type="button" id="noticeRetry"></button></div>';
-        art.querySelector('.membership').after(n);
+        n.innerHTML='<div class="notice-heading"><span class="notice-symbol" aria-hidden="true">i</span><strong class="notice-title"></strong><button type="button" class="notice-close">Ã—</button></div><p class="notice-message"></p><div class="notice-actions"><button type="button" id="noticeRetry"></button></div>';
+        art.querySelector('.membership').append(n);
         n.querySelector('.notice-close').addEventListener('click',clear);
         n.querySelector('#noticeRetry').addEventListener('click',()=>notice?.action==='open'?void openChatGPT():document.dispatchEvent(new CustomEvent('gpt-notice-retry')));
       }

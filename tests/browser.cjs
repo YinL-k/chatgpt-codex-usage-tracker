@@ -19,7 +19,7 @@ async function setup(page,opts={}){
     if(opts.state==='error')f.error={ts:now,status:429};
    }
   };
-  window.chrome={runtime:{getURL:p=>location.origin+'/'+p,onMessage:{addListener(fn){f.capture=fn;}},async sendMessage(m){f.messages.push(m);if(m.type==='UG_EVENT'){f.events.push(m.event);return {ok:true};}if(m.type==='UG_POLL_LIVE')return {ok:true};f.init();const C=GPTUsageCore;
+  window.chrome={windows:{getCurrent:async()=>({id:1})},sidePanel:{open:async()=>{}},runtime:{getURL:p=>location.origin+'/'+p,onMessage:{addListener(fn){f.capture=fn;}},async sendMessage(m){f.messages.push(m);if(m.type==='UG_EVENT'){f.events.push(m.event);return {ok:true};}if(m.type==='UG_POLL_LIVE')return {ok:true};f.init();const C=GPTUsageCore;
    if(m.type==='UG_STATE')return {ok:true,state:f.state,liveUsage:f.live,liveError:f.error,stats:C.stats(f.data),activity:{avg7:5,todayHours:Array(24).fill(0)}};
    if(m.type==='UG_REFRESH_LIVE'){f.refreshes++;return {ok:true,refreshed:opts.state==='data',status:opts.state==='error'?'backoff':opts.state==='empty'?'no-responsive-tab':'ok'};}
    if(m.type==='UG_PREFS'){f.state.settings[C.LOCAL_SCOPE]={...f.state.settings[C.LOCAL_SCOPE],plan:m.plan};return {ok:true};}
@@ -72,11 +72,11 @@ async function run(){
  // Matrix validates both locales/themes, empty/data/error and desktop/narrow surfaces.
  for(const lang of ['en','zh'])for(const theme of ['light','dark'])for(const state of ['empty','data','error']){
   for(const kind of ['popup','desktop','narrow']){
-   const page=await ctx.newPage();await page.setViewportSize(kind==='popup'?{width:338,height:600}:kind==='narrow'?{width:390,height:844}:{width:1280,height:900});await page.emulateMedia({reducedMotion:state==='error'?'reduce':'no-preference'});await setup(page,{lang,theme,state});await page.goto(base+(kind==='popup'?'/popup.html':'/heatmap.html'));await page.waitForFunction(()=>window.GPTTrackerI18n?.currentLang===fixture.opts.lang&&document.documentElement.lang===(fixture.opts.lang==='zh'?'zh-CN':'en'));await page.waitForTimeout(180);
+   const page=await ctx.newPage();await page.setViewportSize(kind==='popup'?{width:355,height:632}:kind==='narrow'?{width:390,height:844}:{width:1280,height:900});await page.emulateMedia({reducedMotion:state==='error'?'reduce':'no-preference'});await setup(page,{lang,theme,state});await page.goto(base+(kind==='popup'?'/popup.html':'/heatmap.html'));await page.waitForFunction(()=>window.GPTTrackerI18n?.currentLang===fixture.opts.lang&&document.documentElement.lang===(fixture.opts.lang==='zh'?'zh-CN':'en'));await page.waitForTimeout(180);
    if(kind==='popup'){
     assert.equal(await page.locator('#popupThemeToggle').isVisible(),true);assert.equal(await page.locator('[data-language=zh]').isVisible(),true);
     assert.equal(await page.locator('#compactPlan').textContent(),state==='empty'?(lang==='zh'?'尚未识别':'Not identified yet'):'Business Premium');
-    if(state!=='empty')assert.equal(await page.locator('#codexPrimary').textContent(),'99%');
+    if(state!=='empty')assert.equal(await page.locator('#codexPrimary').textContent(),'99');
     const file=`${kind}-${lang}-${theme}-${state}.png`;await page.screenshot({path:path.join(out,file)});report.screenshots.push(file);
    }else{
     for(const tab of ['overview','activity','usage']){await page.locator('#tab-'+tab).click();await page.waitForTimeout(130);if(state==='error')assert.equal(await page.locator('#'+tab+'View').evaluate(n=>getComputedStyle(n).animationName),'none');assert.equal(await page.locator('#'+tab+'View').isVisible(),true);const file=`${kind}-${tab}-${lang}-${theme}-${state}.png`;await page.screenshot({path:path.join(out,file),fullPage:true});report.screenshots.push(file);}
@@ -97,9 +97,10 @@ async function run(){
  const download=page.waitForEvent('download');await page.locator('#exportData').click();const downloaded=await download;const exported=JSON.parse(fs.readFileSync(await downloaded.path(),'utf8'));assert.equal(exported.meta.appVersion,'3.5.0');
  await page.locator('#importFileInput').setInputFiles({name:'fixture.json',mimeType:'application/json',buffer:Buffer.from(JSON.stringify({meta:{version:5},data:{'2026-01-02':{count:5,timestamps:[]}}}))});await page.waitForFunction(()=>fixture.data['2026-01-02']?.count===5);
  await page.locator('#tab-activity').click();const originalPie=await page.evaluate(()=>timeDistributionState.total);await page.evaluate(()=>{allData['2099-01-01']={count:100,timestamps:[Date.now()+86400000]};updateTimeDistribution();});assert.equal(await page.evaluate(()=>timeDistributionState.total),originalPie);await page.locator('.day-cell[data-date]').first().focus();await page.keyboard.press('Enter');assert.equal(await page.locator('[role=dialog]').isVisible(),true);await page.keyboard.press('Tab');assert.equal(await page.locator('#modalCloseBtn').evaluate(n=>n===document.activeElement),true);await page.keyboard.press('Escape');assert.equal(await page.locator('[role=dialog]').isVisible(),false);
- const popup=await ctx.newPage();await setup(popup,{lang:'en',theme:'dark',state:'data'});await popup.setViewportSize({width:338,height:600});await popup.goto(base+'/popup.html');await popup.locator('#popupThemeToggle').click();assert.equal(await popup.locator('#artboard').getAttribute('data-theme'),'light');await popup.locator('[data-language=zh]').click();await popup.waitForFunction(()=>document.documentElement.lang==='zh-CN');await popup.locator('#openDashboard').click();assert.match(await popup.evaluate(()=>fixture.opened),/heatmap.html#usage$/);await popup.close();
+ const popup=await ctx.newPage();await setup(popup,{lang:'en',theme:'dark',state:'data'});await popup.setViewportSize({width:355,height:632});await popup.goto(base+'/popup.html');await popup.locator('#popupThemeToggle').click();assert.equal(await popup.locator('#artboard').getAttribute('data-theme'),'light');await popup.locator('[data-language=zh]').click();await popup.waitForFunction(()=>document.documentElement.lang==='zh-CN');await popup.locator('#openDashboard').click();assert.match(await popup.evaluate(()=>fixture.opened),/heatmap.html#overview$/);await popup.close();
  report.smoke.push('keyboard/theme/language/calibrate/clear/refresh/export/import/modal');
  assert.deepEqual(report.errors,[]);assert.deepEqual(report.externalRequests,[]);await browser.close();
  fs.writeFileSync(path.join(out,'browser-report.json'),JSON.stringify(report,null,2));console.log(JSON.stringify({dom:report.dom.length,smoke:report.smoke.length,screenshots:report.screenshots.length,externalRequests:report.externalRequests.length,errors:report.errors.length}));
 }
-run().catch(e=>{report.failure=e.stack;fs.writeFileSync(path.join(out,'browser-report.json'),JSON.stringify(report,null,2));console.error(e);process.exitCode=1;setTimeout(()=>process.exit(1),500);}).finally(()=>server.close());
+module.exports={setup,server,report,root,out};
+if(require.main===module)run().catch(e=>{report.failure=e.stack;fs.writeFileSync(path.join(out,'browser-report.json'),JSON.stringify(report,null,2));console.error(e);process.exitCode=1;setTimeout(()=>process.exit(1),500);}).finally(()=>server.close());

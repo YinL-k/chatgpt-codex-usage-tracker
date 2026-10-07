@@ -9,7 +9,7 @@ chrome.storage.local.setAccessLevel({accessLevel:'TRUSTED_CONTEXTS'}).catch(()=>
    A stale content script from an unpacked-extension reload cannot answer through
    the new runtime, so the ping fails and we safely re-inject. Normal service-worker
    wakeups leave a healthy tracker untouched. */
-const TRACKER_VERSION='3.6.0.61';
+const TRACKER_VERSION='3.6.0.62';
 async function trackerAlive(tabId){
   try{const r=await chrome.tabs.sendMessage(tabId,{type:'UG_TRACKER_PING'});return r?.ok===true&&r.version===TRACKER_VERSION;}catch{return false;}
 }
@@ -201,3 +201,4 @@ async function handle(m){
 
 // Optional Side Chat module. Usage remains available if its initialization fails.
 try { importScripts('sidechat/core.js', 'sidechat/worker.js'); } catch (error) { console.warn('[SakuraMeter Side Chat] initialization failed', error); }
+importScripts('reset-notifications-core.js','reset-notifications-worker.js');

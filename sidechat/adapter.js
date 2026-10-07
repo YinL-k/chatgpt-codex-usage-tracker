@@ -6,10 +6,11 @@
   if(window.top===window||location.origin!=='https://chatgpt.com'||location.ancestorOrigins?.[0]!==origin)return;
   if(globalThis.__sakuraChatAdapterV1)return;globalThis.__sakuraChatAdapterV1=true;
   const K=SakuraSideCore,R=SakuraModelResolver,bridgeID=crypto.randomUUID(),SELECTOR='[data-message-author-role="user"]',MODEL_SOURCE='SAKURA_MODEL_OBSERVER_V2';
+  let dismissedSource='',captureSource='',pageDismissed=false;
   let port=null,context=null,labels={},theme='dark',captureStatus='',prepared={},statusLast='',lastAnnounce=0;
   let queued=0,writing=false,editorLast=null,rawRoute=location.pathname,route=chatID()||'draft:'+crypto.randomUUID();
   let lastPrepared='',disposed=false,observer=null,recentRequest=null;
-  const receipts=[],pageLedger=new Map(),knownNodes=new WeakSet(),knownIDs=new Set();
+  const receipts=[],knownNodes=new WeakSet(),knownIDs=new Set();
   const provisionalTTL=8000,receiptTTL=60000;
   const NATIVE_STYLE_ID='sakura-sidechat-native-style',NATIVE_BAR_ID='sakura-sidechat-native-bar',NATIVE_BRAND_ID='sakura-native-brand-svg';
   function hideNativeModeSwitch(){
@@ -244,7 +245,7 @@
     if(rawRoute===location.pathname)return;
     const previous=route,nextID=chatID();
     if(previous.startsWith('draft:')&&nextID&&receipts.some(r=>r.route===previous&&Date.now()-r.at<30000)){
-      route=nextID;const prior=pageLedger.get(previous);if(prior)pageLedger.set(route,prior);pageLedger.delete(previous);
+      route=nextID;
       for(const r of receipts)if(r.route===previous)r.route=route;
     }else route=nextID||'draft:'+crypto.randomUUID();
     rawRoute=location.pathname;lastPrepared='';
@@ -276,14 +277,14 @@
     if(key===lastPrepared)return;lastPrepared=key;
     prepared={full:K.prepare(context),page:K.prepare(context,{includeSelection:false}),focus:K.prepare(context,{includePage:false})};
   }
-  const view=SakuraSideView.create({composer,translate:t,onClear:item=>{
+  const view=SakuraSideView.create({composer,translate:t,onDismiss:item=>{dismissedSource=captureSource;pageDismissed=true;context={...item,page:null};post({type:'SC_DISMISS_PAGE',id:item.id});rebuild();render();},onRestore:()=>{dismissedSource='';pageDismissed=false;post({type:'SC_RESTORE_PAGE'});},onClear:item=>{
     post({type:'SC_CLEAR',id:item.id,selectionKey:K.selectionKey(item)});
     if(context?.id===item.id)context={...context,selection:null};rebuild();render();
   }});
   function render(){
     ensureNativeBar();
     if(!port)return;
-    view.update(context,theme);
+    view.update(context,theme,pageDismissed);
     const el=composer();
     const status=JSON.stringify({type:'SC_STATUS',ready:!!el,hasDraft:!!read(el).trim(),url:location.origin+location.pathname});
     if(status!==statusLast){statusLast=status;post(JSON.parse(status));}
@@ -296,14 +297,12 @@
     // Capture -> native submit is one event chain. A user retry of the same
     // rewritten draft also proceeds unchanged, with no duplicate wrapper.
     if(receipts.some(r=>r.route===route&&!r.observed&&!r.consumed&&r.editor===el&&r.expectedNorm===norm(question)))return;
-    const now=Date.now(),valid=K.validContext(context),page=prepared.full?.pageKey||prepared.page?.pageKey||'';
-    const ledger=pageLedger.get(route),knownPage=!!page&&ledger?.key===page&&(ledger.confirmed||now-ledger.at<provisionalTTL);
+    const now=Date.now(),valid=K.validContext(context);
     const selected=valid?K.selectionKey(context):'';
     const selectionInFlight=selected&&receipts.some(r=>r.route===route&&!r.failed&&r.selectionKey===selected&&(r.observed||now-r.at<provisionalTTL));
-    const sameConversation=!!chatID()&&context?.source?.tabUrl===location.origin+location.pathname;
-    const usePage=valid&&!knownPage&&!sameConversation;
+    const usePage=valid&&!pageDismissed&&K.validPage(context.page);
     const useSelection=valid&&K.validSelection(context.selection)&&!selectionInFlight;
-    const variant=usePage?(useSelection?prepared.full:prepared.page):(useSelection?prepared.focus:null);
+    let variant=usePage?(useSelection?prepared.full:prepared.page):(useSelection?prepared.focus:null);
     const id=crypto.randomUUID(),marker=variant?.body?'SAKURA_CONTEXT_'+id.replaceAll('-',''):'';
     const expected=K.wrap(question,variant,id);
     const nodes=document.querySelectorAll(SELECTOR),tail=nodes[nodes.length-1]||null;
@@ -313,7 +312,6 @@
     try{
       if(expected!==question){writing=true;setText(el,expected);writing=false;}
       receipts.push(r);
-      if(r.pageKey)pageLedger.set(route,{key:r.pageKey,at:now,id,confirmed:false});
       if(receipts.length>30)receipts.shift();
       schedule();
       // NO preventDefault / synthetic send on the normal path.
@@ -338,7 +336,6 @@
   }
   function accept(r,node){
     r.observed=true;r.node=node;r.observedAt=Date.now();
-    if(r.pageKey&&(!pageLedger.has(r.route)||pageLedger.get(r.route).at<=r.at))pageLedger.set(r.route,{key:r.pageKey,at:r.at,id:r.id,confirmed:true});
     if(r.selectionKey){
       if(context?.id===r.contextId&&K.selectionKey(context)===r.selectionKey){context={...context,selection:null};rebuild();}
       post({type:'SC_CONTEXT_USED',contextId:r.contextId,selectionKey:r.selectionKey});
@@ -373,7 +370,7 @@
           // per-send marker is stable; full-message equality and IDs are NOT required.
           const text=n.textContent||'';
           if(r.marker?!text.includes(r.marker):norm(text)!==norm(r.question))continue;
-          if(failed(n)){r.failed=true;if(pageLedger.get(route)?.id===r.id)pageLedger.delete(route);continue;}
+          if(failed(n)){r.failed=true;continue;}
           if(!r.consumed&&norm(draft)===r.expectedNorm)continue;
           knownNodes.add(n);accept(r,n);break;
         }
@@ -381,13 +378,10 @@
       if(r.observed){
         // React can replace a message node. Reattach only with our own known marker.
         if(!r.node?.isConnected&&r.marker){r.node=candidates.find(n=>(n.textContent||'').includes(r.marker))||r.node;view.fold(r.node,r);}
-        if(r.node?.isConnected){void count(r);if(failed(r.node)){r.failed=true;view.reveal(r.node);if(pageLedger.get(route)?.id===r.id)pageLedger.delete(route);}}
+        if(r.node?.isConnected){void count(r);if(failed(r.node)){r.failed=true;view.reveal(r.node);}}
       }
     }
     for(let i=receipts.length-1;i>=0;i--)if(now-receipts[i].at>receiptTTL){receipts.splice(i,1);}
-    // Expire only the unconfirmed dedupe hint. Never disable the composer or report a fake send failure.
-    for(const [key,v]of pageLedger)if(!v.confirmed&&now-v.at>provisionalTTL)pageLedger.delete(key);
-    if(pageLedger.size>40)pageLedger.delete(pageLedger.keys().next().value);
     render();
   }
   function schedule(){if(queued||disposed)return;queued=setTimeout(()=>{queued=0;tick();},60);}
@@ -397,9 +391,11 @@
     port?.close();port=e.ports[0];
     port.onmessage=event=>{
       const m=event.data;
-      if(m?.type==='SC_FORGET_PAGE'){pageLedger.delete(route);return;}
       if(m?.type!=='SC_UPDATE')return;
-      context=K.validContext(m.context)?m.context:null;labels=m.labels||{};theme=m.theme==='light'?'light':'dark';captureStatus=m.captureStatus||'';
+      captureSource=m.source?.pageIdentity||m.source?.url||'';
+      if(dismissedSource && captureSource!==dismissedSource)dismissedSource='';
+      pageDismissed=!!m.pageDismissed||!!dismissedSource;
+      context=K.validContext(m.context)?m.context:null;if(context&&pageDismissed)context={...context,page:null};labels=m.labels||{};theme=m.theme==='light'?'light':'dark';captureStatus=m.captureStatus||'';
       // Ignore worker echoes of an already-consumed old highlight, but retain newer selections.
       if(context?.selection&&receipts.some(r=>r.observed&&r.contextId===context.id&&r.selectionKey===K.selectionKey(context)))context={...context,selection:null};
       rebuild();render();view.refreshFolds();
@@ -420,6 +416,6 @@
   if(document.documentElement)observe();else document.addEventListener('DOMContentLoaded',observe,{once:true});
   if(document.body)ensureNativeBar();else document.addEventListener('DOMContentLoaded',ensureNativeBar,{once:true});
   const timer=setInterval(()=>{announce();if(receipts.length||editorLast!==composer()||rawRoute!==location.pathname){editorLast=composer();schedule();}},500);
-  window.addEventListener('pagehide',()=>{disposed=true;clearInterval(timer);clearTimeout(queued);observer?.disconnect();context=null;receipts.length=0;pageLedger.clear();port?.close();});
+  window.addEventListener('pagehide',()=>{disposed=true;clearInterval(timer);clearTimeout(queued);observer?.disconnect();context=null;receipts.length=0;port?.close();});
   announce();
 })();

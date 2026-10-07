@@ -437,5 +437,19 @@
   "pro_learning_cycle": "Learning reset cycle",
   "pro_waiting_metadata": "Tracking Pro sends · waiting for reset metadata",
   "popup_codex_reset": "Codex Reset",
-  "popup_forecast": "Forecast"
+  "popup_forecast": "Forecast",
+  "rn_title": "Reset notifications",
+  "rn_note": "Predictive reminders. Low sensitivity: fewer notifications, stronger signals. Thresholds are experimental, not a verified success rate.",
+  "rn_enable": "Browser reminders",
+  "rn_standard": "Standard",
+  "rn_low": "Low sensitivity",
+  "rn_6": "Next 6 hours",
+  "rn_normal": "Normal",
+  "rn_watch": "Watch",
+  "rn_alert": "Elevated",
+  "rn_unavailable": "Unavailable",
+  "rn_waiting": "Waiting for update",
+  "rn_days": "d",
+  "rn_hours": "h",
+  "rn_minutes": "m"
 }

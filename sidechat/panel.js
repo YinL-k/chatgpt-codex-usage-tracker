@@ -8,7 +8,7 @@
   const t = key => SakuraSideStrings[lang]?.[key] || SakuraSideStrings.en[key] || key;
   function post(m) { try { lifecycle?.postMessage(m); } catch { connect(); } }
   function tellFrame() {
-    try { bridge?.postMessage({ type: 'SC_UPDATE', context: state?.context || null, theme, lang, captureStatus: state?.status || '', labels: SakuraSideStrings[lang] }); } catch {}
+    try { bridge?.postMessage({ type: 'SC_UPDATE', context: state?.context || null, pageDismissed:state?.pageDismissed, source:state?.source, theme, lang, captureStatus: state?.status || '', labels: SakuraSideStrings[lang] }); } catch {}
   }
   function applyLanguage() {
     document.documentElement.lang = lang === 'zh' ? 'zh-CN' : 'en';
@@ -248,6 +248,7 @@
         }
         try { const u = new URL(m.url); if (u.origin === 'https://chatgpt.com') { lastChatURL = u.origin + u.pathname; syncChatSurface(lastChatURL); } } catch {}
       } else if (m.type === 'SC_CLEAR') post({ type: 'SC_CLEAR', id: m.id, selectionKey: m.selectionKey });
+      else if (m.type === 'SC_DISMISS_PAGE' || m.type === 'SC_RESTORE_PAGE') { if(state && m.type==='SC_DISMISS_PAGE'){state.pageDismissed=true;if(state.context)state.context={...state.context,page:null};}post(m); }
       else if (m.type === 'SC_CONTEXT_USED') post(m);
       else if (m.type === 'SC_SENT') post(m);
       else if (m.type === 'SC_ERROR') toast(m.key || 'sendError');

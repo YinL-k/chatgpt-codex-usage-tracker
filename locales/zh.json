@@ -437,5 +437,19 @@
   "pro_learning_cycle": "正在学习重置周期",
   "pro_waiting_metadata": "正在记录 Pro 使用 · 等待重置元数据",
   "popup_codex_reset": "Codex 重置",
-  "popup_forecast": "预测"
+  "popup_forecast": "预测",
+  "rn_title": "Reset 通知",
+  "rn_note": "预测型提醒。低敏：更少通知、更强信号才提醒。阈值为初始参数，不代表已验证的成功率。",
+  "rn_enable": "浏览器提醒",
+  "rn_standard": "标准",
+  "rn_low": "低敏",
+  "rn_6": "未来 6 小时",
+  "rn_normal": "普通",
+  "rn_watch": "关注",
+  "rn_alert": "信号升高",
+  "rn_unavailable": "暂不可用",
+  "rn_waiting": "等待更新",
+  "rn_days": "天",
+  "rn_hours": "小时",
+  "rn_minutes": "分钟"
 }

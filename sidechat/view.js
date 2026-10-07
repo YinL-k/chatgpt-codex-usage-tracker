@@ -2,8 +2,8 @@
 (() => {
   'use strict';
   const svg = '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M7 5H3v6h4V5Zm10 0h-4v6h4V5ZM7 11c0 3-2 4-4 4m14-4c0 3-2 4-4 4"/></svg>';
-  function create({composer,translate,onClear}) {
-    let host=null,shadow=null,previewOpen=false, current=null, lastKey='',currentTheme='dark';
+  function create({composer,translate,onClear,onDismiss,onRestore}) {
+    let host=null,shadow=null,previewOpen=false, current=null, lastKey='',currentTheme='dark',dismissed=false;
     const folds=new WeakMap(),foldList=[];
     function mount() {
       if(!host) {
@@ -22,7 +22,7 @@
         .preview{margin-top:5px;padding:10px;border:1px solid var(--line);border-radius:9px;background:var(--bg);max-height:240px;overflow:auto;scrollbar-width:thin}
         .source{font-size:10px;color:var(--muted);word-break:break-all;margin-bottom:8px}.preview pre{margin:0;white-space:pre-wrap;word-break:break-word;font:11px/1.5 ui-monospace,SFMono-Regular,Consolas,monospace}
         .note{font-size:10px;color:var(--muted);margin:8px 0 0;padding-top:7px;border-top:1px solid var(--line)}[hidden]{display:none!important}
-        
+
         /* B SURFACE: own context controls only; no ChatGPT content or handlers changed. */
         :host{--arc:224 149 177;--edge:rgba(242,191,211,.38);--top:rgba(255,226,239,.12);--depth:rgba(0,0,0,.17)}
         :host([data-theme=light]){--arc:157 72 112;--edge:rgba(157,84,119,.30);--top:#fff;--depth:rgba(117,62,90,.08)}
@@ -34,21 +34,29 @@
         :host([data-theme=light]){--edge:rgba(157,84,119,.22);--top:rgba(255,255,255,.92);--depth:rgba(117,62,90,.04)}
         :host([data-theme=light]) .row::before,:host([data-theme=light]) .preview::before{background:radial-gradient(ellipse at 104% 116%,rgba(173,66,111,.05),transparent 78%),linear-gradient(124deg,rgba(255,255,255,.28),transparent 45%);mask-image:none}
         /* END B SURFACE */
-</style><div class="row"><button class="chip" type="button">${svg}<span class="label"></span></button><button class="remove" type="button">\u00d7</button></div><div class="preview" hidden><div class="source"></div><pre></pre><p class="note"></p></div>`;
-        shadow.querySelector('.chip').addEventListener('click',()=>{previewOpen=!previewOpen;lastKey='';update(current,currentTheme);});
+.remove-page{opacity:0;width:25px;height:26px}.row:hover .remove-page,.row:focus-within .remove-page{opacity:1}
+        .row::before,.preview::before{background:radial-gradient(ellipse at 110% 120%,rgb(var(--arc) / .12),transparent 72%),repeating-radial-gradient(ellipse at 115% 145%,transparent 0 12px,rgb(var(--arc) / .07) 13px 14px,transparent 15px 25px)}
+        .restore{padding:4px 8px;color:var(--muted)}
+</style><button class="restore" hidden></button><div class="row"><button class="chip" type="button">${svg}<span class="label"></span></button><button class="remove-page" type="button">×</button><button class="remove" type="button">\u00d7</button></div><div class="preview" hidden><div class="source"></div><pre></pre><p class="note"></p></div>`;
+        shadow.querySelector('.remove-page').addEventListener('click',()=>{previewOpen=false;onDismiss(current);composer()?.focus();});
+        shadow.querySelector('.restore').addEventListener('click',()=>onRestore());
+        shadow.querySelector('.chip').addEventListener('click',()=>{previewOpen=!previewOpen;lastKey='';update(current,currentTheme,dismissed);});
         shadow.querySelector('.remove').addEventListener('click',()=>{if(current?.selection)onClear(current);previewOpen=false;composer()?.focus();});
       }
       const el=composer(),parent=el?.closest('form')||el?.parentElement?.parentElement;
       if(parent&&!parent.contains(host))parent.insertBefore(host,parent.firstChild);
       return !!el;
     }
-    function update(item,theme='dark') {
-      current=item;currentTheme=theme;const hasEditor=mount();
-      const key=JSON.stringify([item?.id,item?.page?.fingerprint,item?.selection?.id,item?.selection?.capturedAt,theme,previewOpen,translate('shortPage'),hasEditor]);
+    function update(item,theme='dark',paused=false) {
+      dismissed=paused;current=item;currentTheme=theme;const hasEditor=mount();
+      const key=JSON.stringify([item?.id,item?.page?.fingerprint,item?.selection?.id,item?.selection?.capturedAt,theme,paused,previewOpen,translate('shortPage'),hasEditor]);
       if(lastKey===key)return;lastKey=key;
-      host.hidden=!item||!hasEditor;host.dataset.theme=theme;
-      if(!item)return;
-      const page=SakuraSideCore.validPage(item.page),selection=SakuraSideCore.validSelection(item.selection);
+      const page=SakuraSideCore.validPage(item?.page),selection=SakuraSideCore.validSelection(item?.selection);
+      host.hidden=(!page&&!selection&&!paused)||!hasEditor;host.dataset.theme=theme;
+      shadow.querySelector('.row').hidden=!page&&!selection;
+      const restore=shadow.querySelector('.restore');restore.hidden=!paused;restore.textContent=translate('restorePage');
+      const closePage=shadow.querySelector('.remove-page');closePage.hidden=!page;closePage.title=translate('removePage');closePage.setAttribute('aria-label',translate('removePage'));
+      if(!page&&!selection){shadow.querySelector('.preview').hidden=true;shadow.querySelector('pre').textContent='';return;}
       shadow.querySelector('.label').textContent=(page?translate('shortPage'):'')+(page&&selection?' \u00b7 ':'')+(selection?translate('shortSelection'):'');
       const chip=shadow.querySelector('.chip');chip.title=translate('preview');chip.setAttribute('aria-expanded',String(previewOpen));
       const remove=shadow.querySelector('.remove');remove.hidden=!selection;remove.title=translate('remove');remove.setAttribute('aria-label',translate('remove'));

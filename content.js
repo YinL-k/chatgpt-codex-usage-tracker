@@ -1,7 +1,7 @@
 /* Multi-receipt local confirmation. Submitted text stays in RAM only and is never sent or stored. */
 (()=>{
   'use strict';
-  const TRACKER_VERSION='3.6.0.61';
+  const TRACKER_VERSION='3.6.0.62';
   // Always replace an older/same-version tracker instance. This matters for
   // unpacked-extension reloads where the old isolated world can outlive its
   // chrome.runtime context.

@@ -1,6 +1,6 @@
 (() => {
   'use strict';
-  const en = {
+  const en = {removePage:'Remove page reference',restorePage:'Reference this page again',
     sidechat: 'Side Chat', subtitle: 'Your page. Your ChatGPT.', usage: 'Open usage dashboard', newChat: 'New chat', reload: 'Reload ChatGPT', login: 'Open ChatGPT in a tab',
     theme: 'Switch theme', language: 'Switch language', settings: 'Settings', close: 'Close',
     welcomeTitle: 'ChatGPT, beside your page.', welcomeBody: 'The current page is included automatically. Highlight a passage when you want extra focus.',
@@ -24,7 +24,7 @@
     pageError: 'The ChatGPT frame is not ready. Sign in or reload.', connectionError: 'Side Chat could not connect. Close and reopen the panel.',
     pageReady: 'Current page ready', source: 'Source', unknown: 'Current page', local: 'SIDE CHAT', retry: 'Try again', done: 'Done'
   };
-  const zh = {
+  const zh = {removePage:'移除网页引用',restorePage:'重新引用当前页面',
     sidechat:'\u4fa7\u8fb9\u804a\u5929', subtitle:'\u7f51\u9875\u5728\u5de6\uff0cChatGPT \u5728\u53f3', usage:'\u6253\u5f00\u7528\u91cf\u9762\u677f', newChat:'\u65b0\u5bf9\u8bdd', reload:'\u91cd\u65b0\u52a0\u8f7d ChatGPT', login:'\u5728\u65b0\u6807\u7b7e\u9875\u6253\u5f00 ChatGPT',
     theme:'\u5207\u6362\u4e3b\u9898', language:'\u5207\u6362\u8bed\u8a00', settings:'\u8bbe\u7f6e', close:'\u5173\u95ed',
     welcomeTitle:'ChatGPT\uff0c\u5c31\u5728\u7f51\u9875\u65c1\u8fb9\u3002', welcomeBody:'\u5f53\u524d\u7f51\u9875\u4f1a\u81ea\u52a8\u4f5c\u4e3a\u4e0a\u4e0b\u6587\uff1b\u9700\u8981\u7cbe\u786e\u805a\u7126\u65f6\u518d\u5212\u9009\u4e00\u6bb5\u3002',

@@ -998,3 +998,1029 @@ function renderMonthlyStats(year,monthlyTotals) {
   const now=new Date(),entries=Array.from({length:12},(_,month)=>({label:getMonthShortName(month),full:getMonthShortName(month)+' '+year,total:monthlyTotals.get(`${year}-${String(month+1).padStart(2,'0')}`)||0,current:year===now.getFullYear()&&month===now.getMonth()}));
   renderSummaryColumns(list,entries,'monthly');
   const active=entries.filter(x=>x.total>0);if(avg)avg.textContent=active.length?Math.round(active.reduce((sum,x)=>sum+x.total,0)/active.length)+GPTTrackerI18n.t('unit_per_month'):'—';
+}
+
+function renderBusiestWeekday(weekdayTotals) {
+  const el = document.getElementById("busiestWeekday");
+  if (!el) return;
+
+  const t = window.GPTTrackerI18n ? window.GPTTrackerI18n.t : (k, f) => f || k;
+  const max = Math.max(...weekdayTotals);
+
+  el.innerHTML = "";
+
+  if (!max) {
+    el.textContent = t("text_no_data", "No data available.");
+    return;
+  }
+
+  const names = [
+    t("weekday_mon", "Mon"),
+    t("weekday_tue", "Tue"),
+    t("weekday_wed", "Wed"),
+    t("weekday_thu", "Thu"),
+    t("weekday_fri", "Fri"),
+    t("weekday_sat", "Sat"),
+    t("weekday_sun", "Sun"),
+  ];
+
+  // align incoming totals to Mon-first ordering (data array is Sun-first)
+  const entries = names.map((label, idx) => {
+    const val = weekdayTotals[(idx + 1) % 7] || 0;
+    return { label, value: val, idx };
+  });
+
+  const topSet = new Set(
+    entries
+      .slice()
+      .sort((a, b) => b.value - a.value)
+      .slice(0, 3)
+      .map((item) => item.idx)
+  );
+
+  const container = document.createElement("div");
+  container.className = "weekday-bars";
+
+  entries.forEach((item) => {
+    const row = document.createElement("div");
+    row.className = "weekday-bar-row";
+    row.classList.add(topSet.has(item.idx) ? "is-top" : "is-muted");
+
+    const label = document.createElement("span");
+    label.className = "weekday-label";
+    label.textContent = item.label;
+
+    const bar = document.createElement("div");
+    bar.className = "weekday-bar";
+
+    const fill = document.createElement("div");
+    fill.className = "weekday-bar-fill";
+    const widthPercent = max > 0 ? (item.value / max) * 100 : 0;
+    fill.style.width = `${widthPercent}%`;
+    bar.appendChild(fill);
+
+    const value = document.createElement("span");
+    value.className = "weekday-value";
+    value.textContent = String(item.value);
+
+    row.appendChild(label);
+    row.appendChild(bar);
+    row.appendChild(value);
+    container.appendChild(row);
+  });
+
+  el.appendChild(container);
+}/* ---------- Day detail modal ---------- */
+
+let modalReturnFocus=null;
+function initModal() {
+  const overlay = document.getElementById("dayDetailOverlay");
+  const closeBtn = document.getElementById("modalCloseBtn");
+  if (!overlay || !closeBtn) return;
+
+  closeBtn.addEventListener("click", hideModal);
+
+  overlay.addEventListener("click", (e) => {
+    if (e.target === overlay) hideModal();
+  });
+
+  document.addEventListener("keydown", (e) => {
+    if(overlay.classList.contains('hidden'))return;
+    if(e.key==='Tab'){e.preventDefault();closeBtn.focus();}
+    if (e.key === "Escape") hideModal();
+  });
+
+  // init modal bar chart interactions
+  initDayModalBarChartInteractions();
+}
+
+function handleDayClick(dateStr) {
+  const entry = normalizeEntry(allData[dateStr]);
+  showModalForDay(dateStr, entry);
+}
+
+function showModalForDay(dateStr, entry) {
+  const overlay = document.getElementById("dayDetailOverlay");
+  if (!overlay) return;
+
+  const titleEl = document.getElementById("modalDateTitle");
+  const countEl = document.getElementById("modalCountText");
+  const summaryEl = document.getElementById("modalTimesSummary");
+
+  const count = entry.count || 0;
+  const timestamps = Array.isArray(entry.timestamps) ? entry.timestamps : [];
+
+  const t = window.GPTTrackerI18n ? window.GPTTrackerI18n.t : (k, f) => f || k;
+
+  if (titleEl) titleEl.textContent = formatDateHuman(dateStr);
+
+  if (countEl) {
+    if (!count) {
+      countEl.textContent = t("modal_no_usage", "No activity on this day.");
+    } else {
+      const unit = t("unit_prompt_suffix", " times");
+      const suffix = t("modal_on_this_day", "On this day");
+      countEl.textContent = `${count}${unit} ${suffix}`;
+    }
+  }
+
+  // 3 buckets: Morning(0-8), Noon(8-16), Evening(16-24)
+  let bins = [0, 0, 0];
+  if (timestamps.length) {
+    bins = summarizeTimeBuckets8h(timestamps);
+  }
+
+  if (summaryEl) {
+    if (!count) {
+      summaryEl.textContent = t(
+        "modal_no_usage_detail",
+        "No time-of-day details available."
+      );
+    } else if (!timestamps.length) {
+      summaryEl.textContent = t(
+        "modal_no_timestamps",
+        "Only the total count was saved for this date. No timestamp details."
+      );
+    } else {
+      const labels = [
+        t("modal_bucket_morning", "Morning"),
+        t("modal_bucket_noon", "Noon"),
+        t("modal_bucket_evening", "Evening"),
+      ];
+      const maxVal = Math.max(...bins);
+      if (maxVal === 0) {
+        summaryEl.textContent = t("modal_even_usage", "Activity is evenly distributed.");
+      } else {
+        const topIndices = bins
+          .map((v, i) => (v === maxVal ? i : -1))
+          .filter((i) => i !== -1);
+        const topLabels = topIndices.map((i) => labels[i]);
+        const prefix = t("modal_peak_usage_prefix", "Peak period:");
+        summaryEl.textContent = `${prefix}${topLabels.join(" / ")}`;
+      }
+    }
+  }
+
+  // animated bar chart
+  renderDayTimeChart(bins, true);
+
+  modalReturnFocus=document.activeElement;overlay.classList.remove("hidden");document.getElementById("modalCloseBtn").focus();
+}
+
+function hideModal() {
+  const overlay = document.getElementById("dayDetailOverlay");
+  if (overlay&&!overlay.classList.contains("hidden")){overlay.classList.add("hidden");modalReturnFocus?.focus();}
+
+  // stop animation
+  if (dayModalBarState.animFrameId != null) {
+    cancelAnimationFrame(dayModalBarState.animFrameId);
+    dayModalBarState.animFrameId = null;
+  }
+
+  // hide tooltip
+  hideDayModalBarTooltip();
+  dayModalBarState.hoverIndex = -1;
+}
+
+function summarizeTimeBuckets8h(timestamps) {
+  // 3 buckets: Morning(0-8), Noon(8-16), Evening(16-24)
+  const buckets = [0, 0, 0];
+  timestamps.forEach((ts) => {
+    const d = new Date(ts);
+    const h = d.getHours();
+    if (Number.isNaN(h)) return;
+    if (h < 8) buckets[0]++;
+    else if (h < 16) buckets[1]++;
+    else buckets[2]++;
+  });
+  return buckets;
+}
+
+function initDayModalBarChartInteractions() {
+  const canvas = document.getElementById("dayTimeChart");
+  const tooltip = document.getElementById("dayTimeTooltip");
+  if (!canvas || !tooltip) return;
+
+  dayModalBarState.canvas = canvas;
+  dayModalBarState.tooltip = tooltip;
+
+  canvas.addEventListener("mousemove", handleDayModalBarHover);
+  canvas.addEventListener("mouseleave", () => {
+    dayModalBarState.hoverIndex = -1;
+    hideDayModalBarTooltip();
+    drawDayModalBarChart(dayModalBarState.animProgress || 1);
+  });
+
+  // keep tooltip floating even after window resize/scroll changes
+  window.addEventListener("scroll", () => {
+    if (dayModalBarState.tooltip) {
+      // nothing to do; fixed tooltip stays in place
+    }
+  });
+}
+
+function renderDayTimeChart(bins, animate = true) {
+  animate = animate && !matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const canvas = document.getElementById("dayTimeChart");
+  if (!canvas) return;
+
+  dayModalBarState.canvas = canvas;
+  dayModalBarState.bins = Array.isArray(bins) ? bins.slice(0, 3) : [0, 0, 0];
+  dayModalBarState.hoverIndex = -1;
+  hideDayModalBarTooltip();
+
+  if (!animate || matchMedia("(prefers-reduced-motion: reduce)").matches) {
+    if (dayModalBarState.animFrameId != null) {
+      cancelAnimationFrame(dayModalBarState.animFrameId);
+      dayModalBarState.animFrameId = null;
+    }
+    dayModalBarState.animProgress = 1;
+    drawDayModalBarChart(1);
+    return;
+  }
+
+  // start animation
+  if (dayModalBarState.animFrameId != null) {
+    cancelAnimationFrame(dayModalBarState.animFrameId);
+    dayModalBarState.animFrameId = null;
+  }
+
+  dayModalBarState.animStart = performance.now();
+  dayModalBarState.animProgress = 0;
+
+  const tick = (now) => {
+    const elapsed = now - dayModalBarState.animStart;
+    const t = Math.min(elapsed / dayModalBarState.duration, 1);
+    const eased = easeOutCubic(t);
+    dayModalBarState.animProgress = eased;
+    drawDayModalBarChart(eased);
+
+    if (t < 1) {
+      dayModalBarState.animFrameId = requestAnimationFrame(tick);
+    } else {
+      dayModalBarState.animFrameId = null;
+    }
+  };
+
+  dayModalBarState.animFrameId = requestAnimationFrame(tick);
+}
+
+function drawDayModalBarChart(progress) {
+  const canvas = dayModalBarState.canvas;
+  if (!canvas) return;
+
+  const { ctx, width, height } = getCanvasContext(canvas);
+  ctx.clearRect(0, 0, width, height);
+
+  const bins = dayModalBarState.bins || [0, 0, 0];
+
+  const margin = { top: 10, right: 10, bottom: 28, left: 30 };
+  const plotWidth = width - margin.left - margin.right;
+  const plotHeight = height - margin.top - margin.bottom;
+
+  const styles = getComputedStyle(document.body);
+  const axisColor =
+    (styles.getPropertyValue("--muted-text-color") || "#656d76").trim();
+  const barColor =
+    (styles.getPropertyValue("--accent-color") || "#f06292").trim();
+
+  const tFn = window.GPTTrackerI18n ? window.GPTTrackerI18n.t : (k, f) => f || k;
+
+  const labels = [
+    tFn("modal_bucket_morning", "Morning"),
+    tFn("modal_bucket_noon", "Noon"),
+    tFn("modal_bucket_evening", "Evening"),
+  ];
+
+  const maxVal = Math.max(...bins, 1);
+  const slotWidth = plotWidth / 3;
+  const barWidth = slotWidth * 0.58;
+
+  // Axes
+  ctx.strokeStyle = axisColor;
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(margin.left, margin.top);
+  ctx.lineTo(margin.left, height - margin.bottom);
+  ctx.lineTo(width - margin.right, height - margin.bottom);
+  ctx.stroke();
+
+  // Y ticks: 0 and max
+  ctx.font =
+    '10px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+  ctx.fillStyle = axisColor;
+  ctx.textAlign = "right";
+  ctx.textBaseline = "middle";
+  ctx.fillText("0", margin.left - 4, height - margin.bottom);
+  ctx.fillText(String(maxVal), margin.left - 4, margin.top);
+
+  // Bars + hitboxes
+  dayModalBarState.barRects = [];
+  for (let i = 0; i < 3; i++) {
+    const value = bins[i] || 0;
+    const xCenter = margin.left + slotWidth * i + slotWidth / 2;
+    const targetH = (value / maxVal) * (plotHeight - 4);
+    const h = targetH * Math.max(0, Math.min(progress, 1));
+
+    const x = xCenter - barWidth / 2;
+    const y = height - margin.bottom - h;
+
+    const isHover = dayModalBarState.hoverIndex === i;
+
+    // bar
+    ctx.save();
+    if (isHover) {
+      ctx.shadowBlur = 14;
+      ctx.shadowColor = barColor;
+      ctx.globalAlpha = 1.0;
+    } else {
+      ctx.shadowBlur = 0;
+      ctx.globalAlpha =
+        dayModalBarState.hoverIndex !== -1 ? 0.75 : 1.0;
+    }
+    ctx.fillStyle = barColor;
+    ctx.fillRect(x, y, barWidth, h);
+    ctx.restore();
+
+    dayModalBarState.barRects[i] = { x, y, w: barWidth, h, value };
+
+    // x labels
+    ctx.fillStyle = axisColor;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "top";
+    ctx.fillText(labels[i], xCenter, height - margin.bottom + 6);
+  }
+}
+
+function handleDayModalBarHover(event) {
+  const canvas = dayModalBarState.canvas;
+  let tooltip = dayModalBarState.tooltip;
+  if (!canvas || !tooltip) return;
+
+  const rect = canvas.getBoundingClientRect();
+  const x = event.clientX - rect.left;
+  const y = event.clientY - rect.top;
+
+  const bars = dayModalBarState.barRects || [];
+  let hit = -1;
+
+  for (let i = 0; i < bars.length; i++) {
+    const b = bars[i];
+    if (!b) continue;
+    // if value=0, keep it non-hoverable (same as your current behavior)
+    if (b.h <= 0) continue;
+    if (x >= b.x && x <= b.x + b.w && y >= b.y && y <= b.y + b.h) {
+      hit = i;
+      break;
+    }
+  }
+
+  if (hit === -1) {
+    if (dayModalBarState.hoverIndex !== -1) {
+      dayModalBarState.hoverIndex = -1;
+      drawDayModalBarChart(dayModalBarState.animProgress || 1);
+    }
+    hideDayModalBarTooltip();
+    return;
+  }
+
+  if (hit !== dayModalBarState.hoverIndex) {
+    dayModalBarState.hoverIndex = hit;
+    drawDayModalBarChart(dayModalBarState.animProgress || 1);
+  }
+
+  const value =
+    bars[hit] && typeof bars[hit].value === "number" ? bars[hit].value : 0;
+
+  // ---- Build tooltip text via i18n (no hardcoded prompt) ----
+  const tFn = window.GPTTrackerI18n ? window.GPTTrackerI18n.t : (k, f) => f || k;
+
+  const labelKeys = [
+    "modal_bucket_morning",
+    "modal_bucket_noon",
+    "modal_bucket_evening",
+  ];
+  const rangeKeys = [
+    "modal_bucket_morning_range",
+    "modal_bucket_noon_range",
+    "modal_bucket_evening_range",
+  ];
+
+  const label = tFn(labelKeys[hit], "");
+  const range = tFn(rangeKeys[hit], "");
+  const unit = tFn("unit_prompt_suffix", " times");
+
+  const template = tFn(
+    "modal_bucket_tooltip",
+    "{label} · {range} · {count}{unit}"
+  );
+
+  // Use textContent (not innerHTML) for safety and to keep it simple
+  tooltip.textContent = template
+    .replace("{label}", label)
+    .replace("{range}", range)
+    .replace("{count}", String(value))
+    .replace("{unit}", unit);
+
+  // ---- Make tooltip floating on <body>, so it won't be clipped ----
+  tooltip = ensureFloatingTooltip(tooltip);
+  dayModalBarState.tooltip = tooltip;
+
+  // Show + position (fixed, viewport-based)
+  tooltip.classList.remove("tooltip-hidden");
+  tooltip.classList.add("tooltip-visible");
+  placeTooltipNearBar(tooltip, canvas, bars[hit]);
+
+}
+
+function ensureFloatingTooltip(tooltip) {
+  if (!tooltip) return null;
+
+  if (!tooltip.classList.contains("tooltip-floating")) {
+    // Move tooltip to <body> so it won't be clipped by modal / containers
+    document.body.appendChild(tooltip);
+    tooltip.classList.add("tooltip-floating");
+  }
+
+  tooltip.style.right = "auto";
+  tooltip.style.bottom = "auto";
+  tooltip.style.transform = "translate(0, 0)";
+
+  return tooltip;
+}
+
+function placeTooltipNearBar(tooltip, canvas, barRect) {
+  if (!tooltip || !canvas || !barRect) return;
+
+  const pad = 10;
+  const gap = 12;
+
+  const canvasRect = canvas.getBoundingClientRect();
+
+
+  const barLeft = canvasRect.left + barRect.x;
+  const barRight = barLeft + barRect.w;
+  const barTop = canvasRect.top + barRect.y;
+  const barBottom = barTop + barRect.h;
+
+
+  let left = barRight + gap;
+  let top = (barTop + barBottom) / 2;
+
+
+  tooltip.style.left = `${left}px`;
+  tooltip.style.top = `${top}px`;
+
+  const tw = tooltip.offsetWidth || 0;
+  const th = tooltip.offsetHeight || 0;
+
+
+  top = top - th / 2;
+
+  const vw = window.innerWidth;
+  const vh = window.innerHeight;
+
+
+  if (left + tw + pad > vw) {
+    left = barLeft - gap - tw;
+  }
+
+
+  left = Math.max(pad, Math.min(left, vw - tw - pad));
+
+
+  top = Math.max(pad, Math.min(top, vh - th - pad));
+
+  tooltip.style.left = `${left}px`;
+  tooltip.style.top = `${top}px`;
+}
+
+function placeTooltipNearPointer(tooltip, clientX, clientY, opts = {}) {
+  if (!tooltip) return;
+
+  const pad = typeof opts.pad === "number" ? opts.pad : 10;
+  const gapX = typeof opts.gapX === "number" ? opts.gapX : 14;
+  const gapY = typeof opts.gapY === "number" ? opts.gapY : 14;
+
+  // ensure fixed + reset legacy positioning every time
+  tooltip = ensureFloatingTooltip(tooltip);
+
+
+  let left = clientX + gapX;
+  let top = clientY + gapY;
+
+  tooltip.style.left = `${left}px`;
+  tooltip.style.top = `${top}px`;
+
+  const tw = tooltip.offsetWidth || 0;
+  const th = tooltip.offsetHeight || 0;
+  const vw = window.innerWidth;
+  const vh = window.innerHeight;
+
+
+  if (left + tw + pad > vw) {
+    left = clientX - gapX - tw;
+  }
+
+  if (top + th + pad > vh) {
+    top = clientY - gapY - th;
+  }
+
+
+  left = Math.max(pad, Math.min(left, vw - tw - pad));
+  top = Math.max(pad, Math.min(top, vh - th - pad));
+
+  tooltip.style.left = `${left}px`;
+  tooltip.style.top = `${top}px`;
+}
+
+function hideDayModalBarTooltip() {
+  const tooltip =
+    dayModalBarState.tooltip || document.getElementById("dayTimeTooltip");
+  if (!tooltip) return;
+  tooltip.classList.add("tooltip-hidden");
+  tooltip.classList.remove("tooltip-visible");
+}
+
+function easeOutCubic(t) {
+  return 1 - Math.pow(1 - t, 3);
+}
+
+
+function formatDateHuman(dateStr) {
+  const d = new Date(`${dateStr}T00:00:00`);
+  if (Number.isNaN(d.getTime())) return dateStr;
+
+  const t = window.GPTTrackerI18n ? window.GPTTrackerI18n.t : (k, f) => f || k;
+
+  const weekdays = [
+    t("weekday_sun", "Sun"),
+    t("weekday_mon", "Mon"),
+    t("weekday_tue", "Tue"),
+    t("weekday_wed", "Wed"),
+    t("weekday_thu", "Thu"),
+    t("weekday_fri", "Fri"),
+    t("weekday_sat", "Sat"),
+  ];
+
+  const day = d.getDate();
+  const month = d.getMonth() + 1;
+  const year = d.getFullYear();
+  const weekday = weekdays[d.getDay()];
+
+  return `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(
+    2,
+    "0"
+  )} (${weekday})`;
+}
+
+/* ---------- Theme + import/export ---------- */
+
+function initThemeToggle() {
+  const btn = document.getElementById("themeToggle");
+  if (!btn) return;
+
+  const prefersDark =
+    window.matchMedia &&
+    window.matchMedia("(prefers-color-scheme: dark)").matches;
+  const stored = localStorage.getItem("gptTrackerTheme");
+  const effective = stored || (prefersDark ? "dark" : "light");
+
+  applyTheme(effective);
+
+  btn.addEventListener("click", () => {
+    const isDark = !document.body.classList.contains("dark");
+    applyTheme(isDark ? "dark" : "light");
+  });
+}
+
+function applyTheme(theme) {
+  const btn = document.getElementById("themeToggle");
+  const t = window.GPTTrackerI18n ? window.GPTTrackerI18n.t : (k, f) => f || k;
+
+  if (theme === "dark") {
+    document.body.classList.add("dark");
+  } else {
+    document.body.classList.remove("dark");
+    theme = "light";
+  }
+  document.documentElement.dataset.theme = theme;
+  document.documentElement.style.colorScheme = theme;
+  localStorage.setItem("gptTrackerTheme", theme);
+
+  if (btn) {
+    // iOS-style switch: drive visuals via aria-checked, do NOT render emoji text.
+    btn.setAttribute("aria-checked", theme === "dark" ? "true" : "false");
+    btn.textContent = "";
+    btn.title =
+      theme === "dark"
+        ? t("tooltip_switch_to_light", "Switch to light mode")
+        : t("tooltip_switch_to_dark", "Switch to dark mode");
+  }
+
+  if (timeDistributionState.segments.length > 0) {
+    const colors=getComputedStyle(document.body);
+    for(const segment of timeDistributionState.segments)segment.color=colors.getPropertyValue('--sakura-'+(segment.bucketIndex+1)).trim();
+    drawPieSegments();
+  }
+  if (hourlyChartState.canvas) {
+    renderDailyChart();
+  }
+  document.dispatchEvent(new CustomEvent("gpt-theme-changed", { detail: { theme } }));
+}
+
+function initExportImport() {
+  const exportBtn = document.getElementById("exportData");
+  const importBtn = document.getElementById("importData");
+  const input = document.getElementById("importFileInput");
+  exportBtn.addEventListener('click',()=>GPTFeedback.run(exportBtn,async()=>{
+    const result=await chrome.runtime.sendMessage({type:'UG_EXPORT'});if(!result.ok)throw Error();
+    const url=URL.createObjectURL(new Blob([JSON.stringify(result.payload,null,2)],{type:'application/json'}));
+    const a=document.createElement('a');a.href=url;a.download='sakurameter-activity-'+new Date().toISOString().replace(/[:.]/g,'-')+'.json';document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),10000);
+    GPTFeedback.status(GPTTrackerI18n.t('u_backup'));
+  },'u_export_error'));
+  importBtn.addEventListener("click", () => input.click());
+  input.addEventListener("change", async () => {
+    const file = input.files[0]; if (!file) return;
+    const t = GPTTrackerI18n.t;importBtn.disabled=true;importBtn.setAttribute("aria-busy","true");
+    try {
+      if (file.size > 10 * 1024 * 1024) throw Error("file_too_large");
+      const result = await chrome.runtime.sendMessage({type:"UG_IMPORT",payload:JSON.parse(await file.text())});
+      if (!result.ok) throw Error("invalid_activity_backup");
+      allData = await getStorageData(); buildYearOptions();
+      renderCalendar(currentYear); updateDailyChartForToday(); updateTimeDistribution();
+      GPTFeedback.status(t("u_imported"));
+    } catch { GPTFeedback.status(t("u_import_error"),true); }
+    finally { input.value = "";importBtn.disabled=false;importBtn.removeAttribute("aria-busy"); }
+  });
+}
+
+/* ---------- Time distribution pie chart ---------- */
+
+function initPieChart() {
+  const canvas = document.getElementById("timePieChart");
+  if (!canvas) return;
+  timeDistributionState.canvas = canvas;
+
+  canvas.addEventListener("mousemove", handlePieMouseMove);
+  canvas.addEventListener("mouseleave", handlePieMouseLeave);
+}
+
+function updateTimeDistribution() {
+  const canvas = timeDistributionState.canvas;
+  const emptyEl = document.getElementById("timeDistributionEmpty");
+  if (!canvas || !emptyEl) return;
+
+  const counts = new Array(TIME_BUCKETS.length).fill(0);
+
+  Object.entries(allData).forEach(([dateStr, raw]) => {
+    if (!isDateKey(dateStr)||dateStr>toISODate(new Date())) return;
+    const entry = normalizeEntry(raw);
+    const timestamps = Array.isArray(entry.timestamps)
+      ? entry.timestamps
+      : [];
+    timestamps.forEach((ts) => {
+      const d = new Date(ts);
+      if (Number.isNaN(d.getTime())||ts>Date.now()) return;
+      const hour = d.getHours();
+      if (hour < 0 || hour >= 24) return;
+      const idx = getTimeBucketIndex(hour);
+      if (idx !== -1) counts[idx]++;
+    });
+  });
+
+  const total = counts.reduce((sum, v) => sum + v, 0);
+  const section=document.getElementById('timeDistributionSection'),legend=document.getElementById('distributionLegend');
+  section.classList.toggle('is-empty',!total);legend.replaceChildren();
+  if(total){
+    for(let i=0;i<counts.length;i++){
+      const item=document.createElement('li'),swatch=document.createElement('i'),label=document.createElement('span'),value=document.createElement('strong');
+      swatch.style.background=`var(--sakura-${i+1})`;swatch.setAttribute('aria-hidden','true');
+      label.textContent=GPTTrackerI18n.t(TIME_BUCKETS[i].labelKey)+' · '+GPTTrackerI18n.t(TIME_BUCKETS[i].rangeKey);
+      value.textContent=GPTTrackerI18n.t('distribution_count').replace('{n}',counts[i]).replace('{pct}',Math.round(counts[i]/total*100));
+      item.append(swatch,label,value);legend.append(item);
+    }
+  }
+  canvas.setAttribute('role','img');canvas.setAttribute('aria-label',GPTTrackerI18n.t('distribution_unit')+': '+total);
+  if (!total) {
+    const { ctx, width, height } = getCanvasContext(canvas);
+    ctx.clearRect(0, 0, width, height);
+    emptyEl.style.display = "block";
+
+    timeDistributionState.segments = [];
+    timeDistributionState.total = 0;
+    timeDistributionState.hoverIndex = -1;
+    if (timeDistributionState.animationFrameId != null) {
+      cancelAnimationFrame(timeDistributionState.animationFrameId);
+      timeDistributionState.animationFrameId = null;
+    }
+
+    const tooltip = document.getElementById("pieTooltip");
+    if (tooltip) {
+      tooltip.classList.add("tooltip-hidden");
+      tooltip.classList.remove("tooltip-visible");
+    }
+    return;
+  }
+
+  emptyEl.style.display = "none";
+
+  renderTimeDistributionPie(counts, total);
+}
+
+function getTimeBucketIndex(hour) {
+  for (let i = 0; i < TIME_BUCKETS.length; i++) {
+    const bucket = TIME_BUCKETS[i];
+    if (hour >= bucket.startHour && hour < bucket.endHour) return i;
+  }
+  return -1;
+}
+
+function renderTimeDistributionPie(counts, total) {
+  const canvas = timeDistributionState.canvas;
+  if (!canvas) return;
+
+  const { ctx, width, height } = getCanvasContext(canvas);
+  ctx.clearRect(0, 0, width, height);
+
+  const styles = getComputedStyle(document.body);
+
+
+  const centerX = width / 2;
+  const centerY = height / 2;
+
+  const baseVisualSize = Math.min(canvas.clientWidth, canvas.clientHeight);
+  const radius = baseVisualSize * 0.42;
+  const innerRadius = radius * .55;
+
+  timeDistributionState.centerX = centerX;
+  timeDistributionState.centerY = centerY;
+  timeDistributionState.radius = radius;
+  timeDistributionState.innerRadius = innerRadius;
+  timeDistributionState.total = total;
+  timeDistributionState.segments = [];
+  timeDistributionState.hoverIndex = -1;
+
+  let startAngle = -Math.PI / 2;
+  const sakura = [
+    styles.getPropertyValue("--sakura-1").trim(),
+    styles.getPropertyValue("--sakura-2").trim(),
+    styles.getPropertyValue("--sakura-3").trim(),
+    styles.getPropertyValue("--sakura-4").trim(),
+    styles.getPropertyValue("--sakura-5").trim(),
+    styles.getPropertyValue("--sakura-6").trim(),
+  ];
+
+  for (let i = 0; i < counts.length; i++) {
+    const value = counts[i];
+    if (value <= 0) continue;
+
+    const fraction = value / total;
+    const angle = fraction * Math.PI * 2;
+    const endAngle = startAngle + angle;
+
+    timeDistributionState.segments.push({
+      bucketIndex: i,
+      startAngle,
+      endAngle,
+      value,
+      color: sakura[i % sakura.length],
+      offset: 0,
+      targetOffset: 0,
+      scale: 1,
+      targetScale: 1,
+    });
+
+    startAngle = endAngle;
+  }
+
+  startPieAnimation();
+}
+
+function startPieAnimation() {
+  const canvas = timeDistributionState.canvas;
+  if (!canvas || !canvas.offsetWidth) return;
+  if (timeDistributionState.animationFrameId != null) cancelAnimationFrame(timeDistributionState.animationFrameId);
+  const reduced = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  if (reduced) {
+    for (const seg of timeDistributionState.segments) { seg.offset = seg.targetOffset; seg.scale = seg.targetScale; }
+    drawPieSegments(); timeDistributionState.animationFrameId = null; return;
+  }
+  const loop = () => {
+    if (!canvas.offsetWidth || document.hidden) {timeDistributionState.animationFrameId = null; return;}
+    drawPieSegments();
+    const moving = timeDistributionState.segments.some(seg => Math.abs(seg.offset-seg.targetOffset)>0.02 || Math.abs(seg.scale-seg.targetScale)>0.001);
+    timeDistributionState.animationFrameId = moving ? requestAnimationFrame(loop) : null;
+  };
+  loop();
+}
+
+function drawPieSegments() {
+  const canvas = timeDistributionState.canvas;
+  if (!canvas || !canvas.clientWidth || !canvas.clientHeight) return;
+
+  const segments = timeDistributionState.segments;
+  if (!segments.length) {
+    const { ctx, width, height } = getCanvasContext(canvas);
+    ctx.clearRect(0, 0, width, height);
+    return;
+  }
+
+  const { ctx, width, height } = getCanvasContext(canvas);
+  ctx.clearRect(0, 0, width, height);
+
+  const centerX = timeDistributionState.centerX || width / 2;
+  const centerY = timeDistributionState.centerY || height / 2;
+
+  const baseRadius =
+    timeDistributionState.radius || Math.min(width, height) / 2 - 24;
+  const baseInnerRadius =
+    timeDistributionState.innerRadius || baseRadius * 0.55;
+
+  const styles = getComputedStyle(document.body);
+  const textColor =
+    (styles.getPropertyValue("--text-color") || "#ffffff").trim();
+
+  const hoverIndex = timeDistributionState.hoverIndex;
+
+  segments.forEach((seg, index) => {
+    seg.offset += (seg.targetOffset - seg.offset) * 0.18;
+    seg.scale += (seg.targetScale - seg.scale) * 0.18;
+
+
+
+    const extraR = seg.offset;
+
+    const outerR = baseRadius * seg.scale + extraR;
+    const innerR = baseInnerRadius * seg.scale;
+
+    ctx.beginPath();
+    ctx.arc(centerX, centerY, outerR, seg.startAngle, seg.endAngle);
+    ctx.arc(centerX, centerY, innerR, seg.endAngle, seg.startAngle, true);
+    ctx.closePath();
+
+    ctx.save();
+    ctx.shadowBlur = 18;
+    ctx.shadowColor = seg.color;
+
+    ctx.globalAlpha = hoverIndex !== -1 && hoverIndex !== index ? 0.6 : 1.0;
+
+    ctx.fillStyle = seg.color+"aa";
+    ctx.fill();
+    ctx.restore();
+  });
+
+
+
+  const total = timeDistributionState.total || 0;
+  const sakura3 = (styles.getPropertyValue("--sakura-3") || "#F48FB1").trim();
+
+
+  const fontSize = Math.max(18, timeDistributionState.radius * 0.22);
+
+  const isDark = document.body.classList.contains("dark");
+
+  ctx.save();
+  ctx.font = `${fontSize}px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif`;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+
+
+  ctx.shadowColor = sakura3;
+  ctx.shadowBlur = fontSize * .55;
+  ctx.fillStyle = isDark?sakura3:textColor;
+  ctx.fillText(String(total), centerX, centerY-12);
+  ctx.shadowBlur = 0;
+  ctx.font = '12px system-ui';
+  ctx.fillStyle = textColor;
+  ctx.fillText(GPTTrackerI18n.t('distribution_unit'),centerX,centerY+25);
+
+  ctx.restore();
+}
+
+function handlePieMouseMove(event) {
+  startPieAnimation();
+  const canvas = timeDistributionState.canvas;
+  if (!canvas) return;
+  if (!timeDistributionState.segments.length) return;
+
+  const rect = canvas.getBoundingClientRect();
+  const x = event.clientX - rect.left;
+  const y = event.clientY - rect.top;
+
+  const dx = x - timeDistributionState.centerX;
+  const dy = y - timeDistributionState.centerY;
+  const distance = Math.sqrt(dx * dx + dy * dy);
+
+  const radius = timeDistributionState.radius;
+  const innerRadius = timeDistributionState.innerRadius;
+  const outerLimit = radius * 1.25;
+
+
+  if (distance < innerRadius || distance > outerLimit) {
+    if (timeDistributionState.hoverIndex !== -1) {
+      timeDistributionState.hoverIndex = -1;
+      timeDistributionState.segments.forEach((seg) => {
+        seg.targetOffset = 0;
+        seg.targetScale = 1;
+      });
+    }
+    hidePieTooltip();
+    return;
+  }
+
+  let angle = Math.atan2(dy, dx); // [-PI, PI]
+  if (angle < -Math.PI / 2) {
+    angle += 2 * Math.PI;
+  }
+
+  let foundIndex = -1;
+  timeDistributionState.segments.forEach((seg, index) => {
+    if (angle >= seg.startAngle && angle <= seg.endAngle) {
+      foundIndex = index;
+    }
+  });
+
+  if (foundIndex === -1) {
+    if (timeDistributionState.hoverIndex !== -1) {
+      timeDistributionState.hoverIndex = -1;
+      timeDistributionState.segments.forEach((seg) => {
+        seg.targetOffset = 0;
+        seg.targetScale = 1;
+      });
+    }
+    hidePieTooltip();
+    return;
+  }
+
+  if (foundIndex !== timeDistributionState.hoverIndex) {
+    timeDistributionState.hoverIndex = foundIndex;
+    timeDistributionState.segments.forEach((seg, index) => {
+      if (index === foundIndex) {
+        seg.targetOffset = 16;
+        seg.targetScale = 1.1;
+      } else {
+        seg.targetOffset = 0;
+        seg.targetScale = 0.92;
+      }
+    });
+  }
+
+  startPieAnimation();
+  showPieTooltip(foundIndex, event.clientX, event.clientY);
+}
+
+function handlePieMouseLeave() {
+  if (timeDistributionState.hoverIndex !== -1) {
+    timeDistributionState.hoverIndex = -1;
+    timeDistributionState.segments.forEach((seg) => {
+      seg.targetOffset = 0;
+      seg.targetScale = 1;
+    });
+    startPieAnimation();
+  }
+  hidePieTooltip();
+}
+
+function showPieTooltip(index, clientX, clientY) {
+  let tooltip = document.getElementById("pieTooltip");
+  if (!tooltip) return;
+
+  const seg = timeDistributionState.segments[index];
+  if (!seg) return;
+
+  const bucket = TIME_BUCKETS[seg.bucketIndex];
+  const t = window.GPTTrackerI18n ? window.GPTTrackerI18n.t : (k, f) => f || k;
+
+  const label = t(bucket.labelKey, bucket.id);
+  const range = t(bucket.rangeKey, "");
+  const desc = t(bucket.descKey, "");
+  const unit = t("unit_prompt_suffix", " times");
+  const total = timeDistributionState.total || 1;
+  const pct = ((seg.value / total) * 100).toFixed(1);
+
+  tooltip.innerHTML = `
+    <div class="tooltip-title">${label}</div>
+    <div class="tooltip-range">${range}</div>
+    <div class="tooltip-desc">${desc}</div>
+    <div class="tooltip-metric">${seg.value}${unit} · ${pct}%</div>
+  `;
+  tooltip = ensureFloatingTooltip(tooltip);
+
+  tooltip.classList.remove("tooltip-hidden");
+  tooltip.classList.add("tooltip-visible");
+
+  placeTooltipNearPointer(tooltip, clientX, clientY, {
+    gapX: 14,
+    gapY: 14,
+    pad: 10,
+  });
+
+}
+
+function hidePieTooltip() {
+  const tooltip = document.getElementById("pieTooltip");
+  if (!tooltip) return;
+  tooltip.classList.add("tooltip-hidden");
+  tooltip.classList.remove("tooltip-visible");
+}

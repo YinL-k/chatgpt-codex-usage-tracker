@@ -40,15 +40,15 @@
     observer=new MutationObserver(records => {
       if(records.some(r => !r.target.parentElement?.closest('[data-sakura-sidechat],nav,aside,button,textarea,[contenteditable="true"]'))) schedule(700);
     });
-    if(document.documentElement) observer.observe(document.documentElement,{childList:true,subtree:true,characterData:true,attributes:true,attributeFilter:['hidden','aria-hidden']});
-    document.addEventListener('visibilitychange',visibility);
+    if(document.documentElement) observer.observe(document.documentElement,{childList:true,subtree:true,characterData:true,attributes:true,attributeFilter:['hidden','aria-hidden','checked','aria-checked','disabled','aria-disabled']});
+    document.addEventListener('visibilitychange',visibility);document.addEventListener('change',visibility);
     interval=setInterval(() => schedule(location.href===lastURL ? 300 : 40),5000);
     schedule(40);
   }
   function stop() {
     active=false;epoch++;clearTimeout(timer);clearInterval(interval);timer=interval=scheduledAt=0;
     if(idle && window.cancelIdleCallback) cancelIdleCallback(idle);idle=0;
-    observer?.disconnect();observer=null;document.removeEventListener('visibilitychange',visibility);lastText='';
+    observer?.disconnect();observer=null;document.removeEventListener('visibilitychange',visibility);document.removeEventListener('change',visibility);lastText='';
   }
   async function check(){const r=await send({type:'SC_PAGE_HELLO'});if(r?.ok&&r.enabled)start();else stop();}
   chrome.runtime.onMessage.addListener((m,s,reply) => {

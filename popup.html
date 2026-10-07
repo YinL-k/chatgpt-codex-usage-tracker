@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="dark">
 <meta name="theme-color" content="#101214">
-<title>SakuraMeter - 3.6.0.61</title>
+<title>SakuraMeter - 3.6.0.62</title>
 <!-- System font fallbacks; original SakuraMeter artwork and layout. -->
 <link rel="stylesheet" href="popup-base.css">
 <link rel="stylesheet" href="interaction.css" />
@@ -20,6 +20,7 @@
 
 
 
+<link rel="stylesheet" href="prediction-ui.css">
 </head>
 <body>
 <svg class="svg-defs" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><defs>
@@ -48,7 +49,7 @@
 <svg class="surface-texture" aria-hidden="true"><rect width="100%" height="100%" filter="url(#fine-noise)"/></svg>
 <header class="header">
 <img class="brand-mark" src="assets/sakurameter-dark.svg" alt="" aria-hidden="true" />
-<h1 class="brand-title serif" data-i18n="compact_title">SakuraMeter</h1><span class="version">3.6.0.61</span>
+<h1 class="brand-title serif" data-i18n="compact_title">SakuraMeter</h1><span class="version">3.6.0.62</span>
 <div class="language" role="group" aria-label="Language" data-i18n-aria="button_language"><button type="button" data-language="en" aria-pressed="true">EN</button><span class="language-divider" aria-hidden="true"></span><button type="button" data-language="zh" aria-pressed="false">CN</button></div>
 <div class="theme-control"><svg class="icon sun" aria-hidden="true"><use href="#sun"/></svg><button id="popupThemeToggle" type="button" class="toggle" role="switch" aria-checked="true" aria-label="Dark theme"><span class="toggle-knob"></span></button><svg class="icon moon" aria-hidden="true"><use href="#moon"/></svg></div>
 </header>
@@ -119,7 +120,7 @@
     <svg class="icon chevron" aria-hidden="true"><use href="#chevron"/></svg>
   </button>
   <div class="codex-reset-metric"><div class="codex-reset-metric-head"><span data-i18n="rf_24">Next 24 hours</span><strong id="codexReset24">—</strong></div><div class="codex-reset-track" aria-hidden="true"><span id="codexResetBar24"></span></div></div>
-  <div class="codex-reset-metric"><div class="codex-reset-metric-head"><span data-i18n="rf_48">Within 48 hours</span><strong id="codexReset48">—</strong></div><div class="codex-reset-track" aria-hidden="true"><span id="codexResetBar48"></span></div></div>
+  <div class="codex-reset-metric"><div class="codex-reset-metric-head"><span data-i18n="rn_6">Next 6 hours</span><strong id="codexReset6">—</strong></div><div class="codex-reset-track" aria-hidden="true"><span id="codexResetBar6"></span></div></div>
 </div>
 </section>
 <section class="card activity" aria-labelledby="activity-title">
@@ -137,5 +138,6 @@
 <script src="reset-forecast.js"></script>
 <script src="popup.js"></script>
 <script src="sidechat/popup-entry.js"></script>
+<script src="reset-notifications-core.js"></script><script src="prediction-ui.js"></script>
 </body>
 </html>

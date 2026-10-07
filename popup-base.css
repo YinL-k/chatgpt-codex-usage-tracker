@@ -96,7 +96,7 @@
 
 /* Extension integration layer: preserve the uploaded 941x1672 artboard exactly,
    scaled to a Chrome popup without reflowing the reference composition. */
-html,body{width:338px;height:600px;min-height:600px;max-height:600px;overflow:hidden}
+html,body{width:355px;height:600px;min-height:0;max-height:600px;overflow:hidden}
 body{background:#141517}
 #viewport{width:338px;height:600px;margin:0}
 #artboard{--scale:0.3588516746}
@@ -149,3 +149,5 @@ body{background:#141517}
 #artboard[data-theme=light] .trend-action .trend-path{stroke:#766b73}
 #artboard[data-theme=light] .codex-trend .trend-path{stroke:#5e8d69}
 #artboard[data-theme=light] .trend-action .trend-baseline{stroke:rgba(93,83,91,.18)}
+/* Reduce outer padding to fit the enlarged composition inside native popup limits. */
+#artboard{height:1610px}

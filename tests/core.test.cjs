@@ -51,7 +51,7 @@ test('freshness and errors keep last good snapshot distinguishable',()=>{
 });
 function background(seed={}){
  const data=structuredClone(seed);let listener,network=0;
- const chrome={runtime:{id:'test',getURL:x=>'chrome-extension://test/'+x,onMessage:{addListener:f=>listener=f},onInstalled:{addListener(){}},onStartup:{addListener(){}}},storage:{local:{setAccessLevel:async()=>{},get:async k=>k===null?structuredClone(data):Object.fromEntries((Array.isArray(k)?k:[k]).map(x=>[x,structuredClone(data[x])])),set:async v=>Object.assign(data,structuredClone(v))}},tabs:{query:async()=>[{id:1,active:true},{id:2}],sendMessage:async()=>{network++;await new Promise(r=>setTimeout(r,20));return {ok:true,status:'ok'};}}};
+ const chrome={runtime:{id:'test',getURL:x=>'chrome-extension://test/'+x,onMessage:{addListener:f=>listener=f},onInstalled:{addListener(){}},onStartup:{addListener(){}}},storage:{local:{setAccessLevel:async()=>{},get:async k=>k===null?structuredClone(data):Object.fromEntries((Array.isArray(k)?k:[k]).map(x=>[x,structuredClone(data[x])])),set:async v=>Object.assign(data,structuredClone(v))}},tabs:{query:async()=>[{id:1,active:true},{id:2}],sendMessage:async(id,m)=>{if(m.type==='UG_TRACKER_PING')return {ok:true,version:C.APP_VERSION};network++;await new Promise(r=>setTimeout(r,20));return {ok:true,status:'ok'};}}};
  const ctx={chrome,GPTUsageCore:C,importScripts(){},URL,console,setTimeout,clearTimeout,AbortController};vm.runInNewContext(fs.readFileSync(path.join(__dirname,'../background.js'),'utf8'),ctx);
  const request=(m,page=false)=>new Promise(resolve=>listener(m,{id:'test',url:page?'https://chatgpt.com/c/test':'chrome-extension://test/popup.html',...(page?{tab:{id:1}}:{})},resolve));
  return {data,request,get network(){return network;}};
@@ -66,7 +66,7 @@ test('background backup metadata, legacy import and unsupported import are atomi
  const bg=background({[C.KEY]:C.freshState(now)}),key=C.localDate(now),payload={meta:{version:5,kind:'activity-backup'},data:{[key]:{count:2,timestamps:[now-1,now-2]}}};
  assert.equal((await bg.request({type:'UG_IMPORT',payload})).ok,true);await bg.request({type:'UG_IMPORT',payload});assert.equal(bg.data[key].count,2);
  assert.equal((await bg.request({type:'UG_IMPORT',payload:{meta:{version:99},data:{[key]:900}}})).ok,false);assert.equal(bg.data[key].count,2);
- const exp=await bg.request({type:'UG_EXPORT'});assert.equal(exp.payload.meta.appVersion,'3.5.0');assert.equal(exp.payload.meta.storageSchema,3);assert.deepEqual(exp.payload.data[key],bg.data[key]);
+ const exp=await bg.request({type:'UG_EXPORT'});assert.equal(exp.payload.meta.appVersion,C.APP_VERSION);assert.equal(exp.payload.meta.storageSchema,3);assert.deepEqual(exp.payload.data[key],bg.data[key]);
 });
 test('all refresh entry points share one flight and cooldown across tabs',async()=>{
  const bg=background();await Promise.all([bg.request({type:'UG_REFRESH_LIVE'}),bg.request({type:'UG_POLL_LIVE'},true),bg.request({type:'UG_REFRESH_LIVE'})]);assert.equal(bg.network,1);
@@ -78,7 +78,7 @@ test('server failure persists backoff and preserves cached usage',async()=>{
 });
 test('packaging preserves permissions, versions and bilingual key coverage',()=>{
  const root=path.join(__dirname,'..'),manifest=JSON.parse(fs.readFileSync(path.join(root,'manifest.json')));
- assert.equal(manifest.version,C.APP_VERSION);assert.equal(manifest.version_name,C.APP_VERSION);assert.deepEqual(manifest.permissions,['storage','tabs']);assert.deepEqual(manifest.host_permissions,['https://chatgpt.com/*']);
+ assert.equal(manifest.version,C.APP_VERSION);assert.equal(manifest.version_name,C.APP_VERSION);assert.deepEqual(manifest.permissions,['storage','tabs','sidePanel','scripting','declarativeNetRequestWithHostAccess','alarms','notifications']);assert.deepEqual(manifest.host_permissions,['https://chatgpt.com/*','https://codex.lunarwerx.com/*','https://codex-reset.com/*']);
  const en=JSON.parse(fs.readFileSync(path.join(root,'locales/en.json'))),zh=JSON.parse(fs.readFileSync(path.join(root,'locales/zh.json')));assert.deepEqual(Object.keys(en).sort(),Object.keys(zh).sort());
  for(const file of ['heatmap.html','popup.html','usage-ui.js'])for(const [,key]of fs.readFileSync(path.join(root,file),'utf8').matchAll(/data-i18n(?:-aria)?="([^"]+)"/g))assert.ok(en[key]&&zh[key],key);
  const content=fs.readFileSync(path.join(root,'content.js'),'utf8');assert.equal((content.match(/fetch\(/g)||[]).length,1);assert.match(content,/method:'GET'/);assert.doesNotMatch(content,/method:\s*['"]POST|\/conversation|\/responses|\/completions/);

@@ -1,0 +1,24 @@
+.rn-settings{padding:20px;border:1px solid rgba(190,140,160,.25);border-radius:16px;margin:12px 0;background:radial-gradient(ellipse at bottom right,rgba(220,150,180,.08),transparent 70%)}
+.rn-settings h3{margin:0 0 14px;font-family:Georgia,serif}.rn-settings label{display:flex;align-items:center;gap:10px}.rn-modes{display:flex;flex-wrap:wrap;gap:10px;margin:14px 0}.rn-modes button{padding:10px 14px;border:1px solid rgba(180,135,155,.3);border-radius:12px;background:transparent;color:inherit;cursor:pointer}.rn-modes button[aria-pressed=true]{background:rgba(222,153,177,.15);border-color:#bc7d95}.rn-note{font-size:12px;opacity:.7;line-height:1.6}
+.rn-prediction-values{font:600 28px/1.3 Inter,system-ui,sans-serif;color:#b97591}.rn-prediction-state,.rn-prediction a{font-size:12px}.rn-prediction a{color:inherit}
+.cache-tooltip{position:fixed;z-index:10000;max-width:250px;padding:10px 12px;border-radius:10px;white-space:pre-line;background:#292329;color:#f3d4e0;border:1px solid #705260;box-shadow:0 6px 20px #0003;font:12px/1.5 system-ui;pointer-events:none}
+#artboard .codex-reset-metric strong{font-family:var(--number);font-size:29px;line-height:1.1;background:linear-gradient(180deg,#f0a9bd 15%,rgba(240,169,189,.16) 100%);background-clip:text;color:transparent;font-weight:650}
+#artboard[data-theme=light] .codex-reset-metric strong{background-image:linear-gradient(180deg,#a75074 15%,rgba(167,80,116,.24) 100%)}
+#artboard .codex-reset-sub a{color:inherit;text-decoration:none}
+#artboard .popup-notice{position:absolute!important;inset:auto 20px 12px 116px!important;width:auto!important;height:auto!important;margin:0!important;padding:8px 12px!important;border-radius:12px!important;background:rgba(130,85,105,.12)!important;border:1px solid rgba(205,150,175,.2)!important;font-size:18px!important;box-shadow:none!important;z-index:5}
+#artboard .popup-notice .notice-heading,#artboard .popup-notice .notice-symbol,#artboard .popup-notice .notice-title{display:none!important}
+#artboard .popup-notice .notice-message{font-size:18px!important;line-height:1.25!important;margin:0!important;max-height:46px;overflow:auto}
+#artboard .popup-notice .notice-actions{margin:4px 0 0!important}#artboard .popup-notice #noticeRetry{font-size:18px!important;padding:3px 8px!important;min-height:0!important}
+#artboard .membership.has-inline-notice .membership-description{visibility:hidden}
+#artboard .membership.has-inline-notice .membership-title{top:48px;font-size:34px;line-height:43px}
+#artboard .membership.has-inline-notice .membership-label{top:16px;font-size:21px}
+#artboard .membership .popup-notice{left:149px!important;bottom:12px!important;right:20px!important;padding:7px 10px!important;display:flex;align-items:center;gap:12px}
+#artboard .membership .popup-notice .notice-message{flex:1;min-width:0;font-size:20px!important;line-height:25px!important;max-height:50px}
+#artboard .membership .popup-notice .notice-actions{flex:none;margin:0!important;max-width:180px}
+#artboard .membership .popup-notice #noticeRetry{font-size:20px!important;white-space:normal}
+.reset-countdown-block{position:relative;padding-top:20px;isolation:isolate}.reset-countdown-block .reset-item{position:relative;margin-bottom:0;box-shadow:0 15px 32px -22px rgba(240,170,195,.4)}
+.reset-countdown{font-family:Inter,system-ui,sans-serif;font-size:clamp(26px,3vw,46px);font-weight:650;letter-spacing:-1.5px;line-height:1.2;padding:12px 12px 4px;font-variant-numeric:tabular-nums;background:linear-gradient(180deg,#b87b92 12%,rgba(184,123,146,.08) 100%);background-clip:text;color:transparent}
+body.dark .reset-countdown{background-image:linear-gradient(180deg,#edb2c6 10%,rgba(237,178,198,.06) 100%)}
+.reset-countdown-block::before{content:'';position:absolute;inset:42px 15% 28px;background:radial-gradient(ellipse,rgba(231,165,191,.1),transparent 70%);z-index:-1;pointer-events:none}
+@media(forced-colors:active){.reset-countdown,#artboard .codex-reset-metric strong{background:none;color:CanvasText}}
+@media(prefers-reduced-motion:reduce){#overviewView,#activityView,#usageView{animation:none!important}}
