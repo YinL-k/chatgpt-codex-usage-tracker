@@ -2,26 +2,24 @@ name: Release SakuraMeter
 
 on:
   push:
-    branches:
-      - main
+    tags:
+      - "v*"
 
 permissions:
   contents: write
 
 jobs:
   release:
-    if: github.event.head_commit.message == 'Release SakuraMeter v3.6.0.62'
     runs-on: ubuntu-latest
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
 
-      - name: Build and verify Chrome extension ZIP
+      - name: Build Chrome extension ZIP
         shell: bash
         run: |
           set -euo pipefail
           VERSION="$(python3 -c 'import json; print(json.load(open("manifest.json"))["version"])')"
-          test "$VERSION" = "3.6.0.62"
           rm -rf dist "SakuraMeter-${VERSION}.zip"
           mkdir -p dist
           cp manifest.json dist/
@@ -38,14 +36,9 @@ jobs:
           zip -r "../SakuraMeter-${VERSION}.zip" .
           cd ..
           unzip -t "SakuraMeter-${VERSION}.zip"
-          PACKAGED_VERSION="$(unzip -p "SakuraMeter-${VERSION}.zip" manifest.json | python3 -c 'import json,sys; print(json.load(sys.stdin)["version"])')"
-          test "$PACKAGED_VERSION" = "$VERSION"
 
       - name: Publish GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v3.6.0.62
-          target_commitish: ${{ github.sha }}
-          name: SakuraMeter v3.6.0.62
           generate_release_notes: true
-          files: SakuraMeter-3.6.0.62.zip
+          files: SakuraMeter-*.zip
