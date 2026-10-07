@@ -48,7 +48,7 @@ export function client(fetchImpl = fetch) {
     const signal = AbortSignal.timeout(120_000);
     try {
       const response = await fetchImpl(url, { ...options, redirect: 'error', signal });
-      if (response.status !== expected) fail(`${label}: HTTP ${response.status}`);
+      if (!(Array.isArray(expected) ? expected : [expected]).includes(response.status)) fail(`${label}: HTTP ${response.status}`);
       if (!json) { await response.arrayBuffer(); return response; }
       let body;
       try { body = await response.json(); } catch { fail(`${label}: invalid JSON response`); }
@@ -117,7 +117,8 @@ export async function edge(config, zip, version, request, polling) {
   }, 202, false);
   const uploadId = operation(upload);
   const check = (label, url, id) => poll(label, async () => {
-    const status = await request(label, url, { headers });
+    // Live Edge operation polling also returns HTTP 202 while processing.
+    const status = await request(label, url, { headers }, [200, 202]);
     if (status.id !== id || status.errorCode || (status.errors && (!Array.isArray(status.errors) || status.errors.length))) fail(`${label}: invalid or failed operation`);
     return status;
   }, 'status', 'Succeeded', 'InProgress', polling);

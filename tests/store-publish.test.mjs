@@ -206,3 +206,14 @@ test('Edge upload polling exhaustion never submits', async () => {
   await assert.rejects(edge(edgeConfig, zip, version, request, polling), /limit/);
   assert.equal(calls.filter(call => call.method === 'POST').length, 1);
 });
+
+test('Edge operation polling accepts JSON HTTP 202 without treating it as success', async () => {
+  const pending = () => new Response(JSON.stringify({ id: op, status: 'InProgress' }), {status: 202});
+  const done = () => json({ id: op, status: 'Succeeded' });
+  const { request, calls } = sequence([accepted(), pending(), done(), accepted(), pending(), done()]);
+  assert.equal(await edge(edgeConfig, zip, version, request, polling), 'Succeeded');
+  assert.equal(calls.length, 6);
+  const failed = sequence([accepted(), new Response(JSON.stringify({id: op, status:'Failed'}), {status:202})]);
+  await assert.rejects(edge(edgeConfig, zip, version, failed.request, polling));
+  assert.equal(failed.calls.length, 2);
+});

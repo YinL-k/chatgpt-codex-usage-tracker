@@ -85,3 +85,10 @@ Live OAuth exchange, publisher access, Edge API-key validity and actual review s
 Both YinL-k/chatgpt-codex-usage-tracker and YinL-k/Pixiv-Bookmark-Random use the same publisher service account and Edge Publish API account, with separate extension/product ID variables. The account credentials can manage all extensions belonging to the publisher; repository variables select the intended item. Two Secrets and six Variables are required in each repository. No Google Cloud project roles were granted.
 
 Chrome OAuth authentication and read-only fetchStatus succeeded for both items. Actual upload/review submission was not run. Edge credentials were generated and stored using GitHub secret encryption; no live Edge submission was attempted. The current Edge key expires on 2026-12-18: rotate it in Partner Center before expiry and update EDGE_API_KEY in both repositories. Store listing/privacy changes remain manual.
+
+
+## Live operation polling compatibility (2026-10-07)
+
+The Edge REST reference lists HTTP 200 for operation status reads, but the live SakuraMeter 3.6.0.63 upload returned HTTP 202. Edge polling therefore accepts 200 or 202 with a valid JSON operation response. It still checks the operation ID, errors, and terminal `Succeeded` state; HTTP 202 alone is never success. All other endpoints keep their exact expected HTTP status. A regression covers pending 202 responses at upload and submission stages and failed 202 operations.
+
+GitHub secret metadata confirms only that a name exists, not that its value is nonempty or usable. Verify credential inputs before encrypting them and confirm authentication with an actual operation. A new Chrome permission also requires a saved justification in the Chrome dashboard before API submission.
