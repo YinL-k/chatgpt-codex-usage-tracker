@@ -1,0 +1,35 @@
+name: Check release tooling
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/**'
+      - 'tests/store-publish.test.mjs'
+      - 'tests/test_release*.py'
+      - 'STORE-PUBLISHING.md'
+  pull_request:
+    paths:
+      - '.github/**'
+      - 'tests/store-publish.test.mjs'
+      - 'tests/test_release*.py'
+      - 'STORE-PUBLISHING.md'
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Test API contracts and fail-closed behavior without credentials
+        run: node --test tests/store-publish.test.mjs
+      - name: Test version gate and package integrity without publishing
+        run: python3 -B -m unittest discover -s tests -p 'test_release*.py'
+      - name: Check shell entrypoints
+        run: bash -n .github/scripts/chrome-store-publish.sh .github/scripts/edge-store-publish.sh

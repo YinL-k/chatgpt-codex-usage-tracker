@@ -8,208 +8,115 @@ on:
 permissions:
   contents: read
 
+# A publisher has only one draft. Never overlap or cancel an active submission.
+concurrency:
+  group: sakurameter-store-release
+  cancel-in-progress: false
+
 jobs:
   build:
     name: Validate and build package
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     outputs:
-      version: ${{ steps.version.outputs.version }}
-      artifact_name: ${{ steps.version.outputs.artifact_name }}
+      version: ${{ steps.package.outputs.version }}
+      artifact_name: ${{ steps.package.outputs.artifact_name }}
+      sha256: ${{ steps.package.outputs.sha256 }}
     steps:
-      - name: Check out repository
-        uses: actions/checkout@v4
-
-      - name: Validate tag and manifest version
-        id: version
-        shell: bash
-        run: |
-          set -euo pipefail
-          TAG="${GITHUB_REF_NAME}"
-          if [[ ! "$TAG" =~ ^v[0-9]+(\.[0-9]+){2,3}$ ]]; then
-            echo "::error::Release tag must look like v1.2.3 or v1.2.3.4; got $TAG"
-            exit 1
-          fi
-          VERSION="$(python3 -c 'import json; print(json.load(open("manifest.json"))["version"])')"
-          VERSION_NAME="$(python3 -c 'import json; data=json.load(open("manifest.json")); print(data.get("version_name", data["version"]))')"
-          if [[ "$TAG" != "v$VERSION" ]]; then
-            echo "::error::Tag $TAG does not match manifest version $VERSION"
-            exit 1
-          fi
-          if [[ "$VERSION_NAME" != "$VERSION" ]]; then
-            echo "::error::manifest version_name $VERSION_NAME does not match version $VERSION"
-            exit 1
-          fi
-          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
-          echo "artifact_name=sakurameter-$VERSION" >> "$GITHUB_OUTPUT"
-          echo "Validated release version $VERSION"
-
-      - name: Build and verify Chrome-compatible ZIP
-        shell: bash
-        env:
-          VERSION: ${{ steps.version.outputs.version }}
-        run: |
-          set -euo pipefail
-          rm -rf dist "SakuraMeter-${VERSION}.zip"
-          mkdir -p dist
-          cp manifest.json dist/
-          cp *.js dist/
-          cp *.css dist/
-          cp *.html dist/
-          cp privacy-policy.md dist/
-          cp -R assets dist/
-          cp -R _locales dist/
-          cp -R locales dist/
-          cp -R frontend dist/
-          cp -R sidechat dist/
-          cd dist
-          zip -r "../SakuraMeter-${VERSION}.zip" .
-          cd ..
-          unzip -t "SakuraMeter-${VERSION}.zip"
-          zipinfo -1 "SakuraMeter-${VERSION}.zip" | grep -qx 'manifest.json'
-          PACKAGED_VERSION="$(unzip -p "SakuraMeter-${VERSION}.zip" manifest.json | python3 -c 'import json,sys; print(json.load(sys.stdin)["version"])')"
-          if [[ "$PACKAGED_VERSION" != "$VERSION" ]]; then
-            echo "::error::Packaged manifest version $PACKAGED_VERSION does not match release version $VERSION"
-            exit 1
-          fi
-          echo "Package verified: SakuraMeter-${VERSION}.zip"
-
-      - name: Upload verified release artifact
-        uses: actions/upload-artifact@v4
+      - uses: actions/checkout@v4
+      - name: Validate tag and build ZIP once
+        id: package
+        run: python3 .github/scripts/release-package.py build --tag "$GITHUB_REF_NAME"
+      - uses: actions/upload-artifact@v4
         with:
-          name: ${{ steps.version.outputs.artifact_name }}
-          path: SakuraMeter-${{ steps.version.outputs.version }}.zip
+          name: ${{ steps.package.outputs.artifact_name }}
+          path: release/SakuraMeter-${{ steps.package.outputs.version }}.zip
           if-no-files-found: error
-          retention-days: 7
+          retention-days: 30
 
   github-release:
     name: Publish GitHub Release
     needs: build
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     permissions:
       contents: write
     steps:
-      - name: Download verified release artifact
-        uses: actions/download-artifact@v4
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
         with:
           name: ${{ needs.build.outputs.artifact_name }}
           path: release
-
-      - name: Publish GitHub Release
-        uses: softprops/action-gh-release@v2
+      - name: Verify exact build artifact
+        env:
+          VERSION: ${{ needs.build.outputs.version }}
+          SHA256: ${{ needs.build.outputs.sha256 }}
+        run: python3 .github/scripts/release-package.py verify --zip "release/SakuraMeter-$VERSION.zip" --version "$VERSION" --sha256 "$SHA256"
+      - uses: softprops/action-gh-release@v2
         with:
           generate_release_notes: true
+          fail_on_unmatched_files: true
           files: release/SakuraMeter-${{ needs.build.outputs.version }}.zip
 
-  publish-chrome:
-    name: Publish Chrome Web Store
-    needs: build
+  publish-stores:
+    name: Submit ${{ matrix.store }}
+    needs: [build, github-release]
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
+    timeout-minutes: 20
+    strategy:
+      # One store failure must not suppress the other store's submission.
+      fail-fast: false
+      matrix:
+        store: [chrome, edge]
     steps:
-      - name: Check whether Chrome publishing is enabled
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Validate store gate
         id: gate
-        shell: bash
         env:
-          ENABLED: ${{ vars.CHROME_STORE_PUBLISH_ENABLED }}
+          STORE: ${{ matrix.store }}
+          CHROME_STORE_PUBLISH_ENABLED: ${{ vars.CHROME_STORE_PUBLISH_ENABLED }}
+          EDGE_STORE_PUBLISH_ENABLED: ${{ vars.EDGE_STORE_PUBLISH_ENABLED }}
         run: |
-          if [[ "$ENABLED" == "true" ]]; then
-            echo "enabled=true" >> "$GITHUB_OUTPUT"
-            echo "Chrome Web Store publishing is enabled."
-          else
-            echo "enabled=false" >> "$GITHUB_OUTPUT"
-            echo "Chrome Web Store publishing skipped: set repository variable CHROME_STORE_PUBLISH_ENABLED=true after credentials are configured."
-          fi
-
-      - name: Check out publishing scripts
+          node --input-type=module <<'JS'
+          import { appendFileSync } from 'node:fs';
+          import { enabled } from './.github/scripts/store-publish.mjs';
+          const active = enabled(process.env[`${process.env.STORE.toUpperCase()}_STORE_PUBLISH_ENABLED`]);
+          appendFileSync(process.env.GITHUB_OUTPUT, `enabled=${active}\n`);
+          console.log(active ? 'Store enabled' : 'Store safely skipped: disabled');
+          JS
+      - uses: actions/download-artifact@v4
         if: steps.gate.outputs.enabled == 'true'
-        uses: actions/checkout@v4
-
-      - name: Download verified release artifact
-        if: steps.gate.outputs.enabled == 'true'
-        uses: actions/download-artifact@v4
         with:
           name: ${{ needs.build.outputs.artifact_name }}
           path: release
-
-      - name: Validate Chrome publishing configuration
+      - name: Verify exact build artifact
         if: steps.gate.outputs.enabled == 'true'
-        shell: bash
         env:
+          VERSION: ${{ needs.build.outputs.version }}
+          SHA256: ${{ needs.build.outputs.sha256 }}
+        run: python3 .github/scripts/release-package.py verify --zip "release/SakuraMeter-$VERSION.zip" --version "$VERSION" --sha256 "$SHA256"
+      - name: Upload and submit Chrome
+        if: steps.gate.outputs.enabled == 'true' && matrix.store == 'chrome'
+        env:
+          ZIP_PATH: release/SakuraMeter-${{ needs.build.outputs.version }}.zip
+          RELEASE_VERSION: ${{ needs.build.outputs.version }}
+          ZIP_SHA256: ${{ needs.build.outputs.sha256 }}
+          CHROME_STORE_PUBLISH_ENABLED: ${{ vars.CHROME_STORE_PUBLISH_ENABLED }}
           CHROME_PUBLISHER_ID: ${{ vars.CHROME_PUBLISHER_ID }}
           CHROME_EXTENSION_ID: ${{ vars.CHROME_EXTENSION_ID }}
           CHROME_SERVICE_ACCOUNT_JSON: ${{ secrets.CHROME_SERVICE_ACCOUNT_JSON }}
-        run: |
-          set -euo pipefail
-          missing=0
-          [[ -n "$CHROME_PUBLISHER_ID" ]] || { echo "::error::Missing repository variable CHROME_PUBLISHER_ID"; missing=1; }
-          [[ -n "$CHROME_EXTENSION_ID" ]] || { echo "::error::Missing repository variable CHROME_EXTENSION_ID"; missing=1; }
-          [[ -n "$CHROME_SERVICE_ACCOUNT_JSON" ]] || { echo "::error::Missing repository secret CHROME_SERVICE_ACCOUNT_JSON"; missing=1; }
-          exit "$missing"
-
-      - name: Upload and submit Chrome Web Store release
-        if: steps.gate.outputs.enabled == 'true'
-        shell: bash
+        run: bash .github/scripts/chrome-store-publish.sh
+      - name: Upload and submit Edge
+        if: steps.gate.outputs.enabled == 'true' && matrix.store == 'edge'
         env:
           ZIP_PATH: release/SakuraMeter-${{ needs.build.outputs.version }}.zip
-          CHROME_PUBLISHER_ID: ${{ vars.CHROME_PUBLISHER_ID }}
-          CHROME_EXTENSION_ID: ${{ vars.CHROME_EXTENSION_ID }}
-          CHROME_SERVICE_ACCOUNT_JSON: ${{ secrets.CHROME_SERVICE_ACCOUNT_JSON }}
-        run: .github/scripts/chrome-store-publish.sh
-
-  publish-edge:
-    name: Publish Microsoft Edge Add-ons
-    needs: build
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-    steps:
-      - name: Check whether Edge publishing is enabled
-        id: gate
-        shell: bash
-        env:
-          ENABLED: ${{ vars.EDGE_STORE_PUBLISH_ENABLED }}
-        run: |
-          if [[ "$ENABLED" == "true" ]]; then
-            echo "enabled=true" >> "$GITHUB_OUTPUT"
-            echo "Microsoft Edge Add-ons publishing is enabled."
-          else
-            echo "enabled=false" >> "$GITHUB_OUTPUT"
-            echo "Microsoft Edge Add-ons publishing skipped: set repository variable EDGE_STORE_PUBLISH_ENABLED=true after credentials are configured."
-          fi
-
-      - name: Check out publishing scripts
-        if: steps.gate.outputs.enabled == 'true'
-        uses: actions/checkout@v4
-
-      - name: Download verified release artifact
-        if: steps.gate.outputs.enabled == 'true'
-        uses: actions/download-artifact@v4
-        with:
-          name: ${{ needs.build.outputs.artifact_name }}
-          path: release
-
-      - name: Validate Edge publishing configuration
-        if: steps.gate.outputs.enabled == 'true'
-        shell: bash
-        env:
+          RELEASE_VERSION: ${{ needs.build.outputs.version }}
+          ZIP_SHA256: ${{ needs.build.outputs.sha256 }}
+          EDGE_STORE_PUBLISH_ENABLED: ${{ vars.EDGE_STORE_PUBLISH_ENABLED }}
           EDGE_PRODUCT_ID: ${{ vars.EDGE_PRODUCT_ID }}
           EDGE_CLIENT_ID: ${{ vars.EDGE_CLIENT_ID }}
           EDGE_API_KEY: ${{ secrets.EDGE_API_KEY }}
-        run: |
-          set -euo pipefail
-          missing=0
-          [[ -n "$EDGE_PRODUCT_ID" ]] || { echo "::error::Missing repository variable EDGE_PRODUCT_ID"; missing=1; }
-          [[ -n "$EDGE_CLIENT_ID" ]] || { echo "::error::Missing repository variable EDGE_CLIENT_ID"; missing=1; }
-          [[ -n "$EDGE_API_KEY" ]] || { echo "::error::Missing repository secret EDGE_API_KEY"; missing=1; }
-          exit "$missing"
-
-      - name: Upload and submit Microsoft Edge Add-ons release
-        if: steps.gate.outputs.enabled == 'true'
-        shell: bash
-        env:
-          ZIP_PATH: release/SakuraMeter-${{ needs.build.outputs.version }}.zip
-          EDGE_PRODUCT_ID: ${{ vars.EDGE_PRODUCT_ID }}
-          EDGE_CLIENT_ID: ${{ vars.EDGE_CLIENT_ID }}
-          EDGE_API_KEY: ${{ secrets.EDGE_API_KEY }}
-        run: .github/scripts/edge-store-publish.sh
+        run: bash .github/scripts/edge-store-publish.sh
