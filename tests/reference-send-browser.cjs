@@ -29,7 +29,7 @@ async function run(){
   const frame=f||p.frames().find(f=>f.url().includes('/c/reference-test'));assert.ok(frame);
   await frame.evaluate(base=>{
    window.chrome={runtime:{getURL:path=>base+'/'+path}};
-   window.submits=[];document.querySelector('form').addEventListener('submit',e=>{e.preventDefault();submits.push(document.querySelector('textarea').value);});
+   window.submits=[];window.modelDraft='';document.querySelector('textarea').addEventListener('input',e=>{const value=e.target.value;queueMicrotask(()=>modelDraft=value);});document.querySelector('form').addEventListener('submit',e=>{e.preventDefault();submits.push(modelDraft);});
    const original=Element.prototype.attachShadow;Element.prototype.attachShadow=function(o){return original.call(this,{...o,mode:'open'});};
   },base);
   for(const file of ['sidechat/core.js','model-resolver.js','sidechat/view.js','sidechat/adapter.js'])await frame.addScriptTag({path:path.join(root,file)});
@@ -48,7 +48,7 @@ async function run(){
    const counted=await p.evaluate(()=>received.filter(m=>m.type==='SC_SENT').length);const before=await frame.evaluate(()=>submits.length);
    await frame.locator('textarea').fill(question);await frame.locator('[data-testid="send-button"]').click();
    await frame.waitForFunction(n=>submits.length===n+1,before);
-   const text=await frame.locator('textarea').inputValue();
+   const text=await frame.evaluate(()=>submits.at(-1));assert.equal(text,await frame.locator('textarea').inputValue(),'native send must receive the wrapped reference, not the stale application draft');
    await frame.evaluate(({text,id})=>{const n=document.createElement('div');n.dataset.messageAuthorRole='user';n.dataset.messageId=id;n.textContent=text;document.querySelector('#messages').append(n);document.querySelector('textarea').value='';document.querySelector('textarea').dispatchEvent(new Event('input',{bubbles:true}));},{text,id:'turn-'+(++turn)});
    await p.waitForFunction(n=>received.filter(m=>m.type==='SC_SENT').length>n,counted);return text;
   };
@@ -81,7 +81,32 @@ async function run(){
   await p.evaluate(()=>snapshotDelay=300);await frame.locator('[data-testid=send-button]').click();await frame.locator('[data-testid=send-button]').click();await frame.waitForFunction(n=>submits.length===n+1,beforeFail);assert.equal(await frame.evaluate(()=>submits.length),beforeFail+1);
   await frame.locator('textarea').fill('pending draft');const beforeCancel=await frame.evaluate(()=>submits.length);await frame.locator('[data-testid=send-button]').click();await frame.locator('textarea').fill('edited draft');await frame.waitForTimeout(400);assert.equal(await frame.evaluate(()=>submits.length),beforeCancel);assert.equal(await frame.locator('textarea').inputValue(),'edited draft');
   await frame.locator('[data-testid=send-button]').click();await frame.locator('.remove-page').click();await frame.waitForTimeout(400);assert.equal(await frame.evaluate(()=>submits.length),beforeCancel);
-  console.log('PASS: Page ON semantics, default dedupe, latest snapshot before send, explicit Selection target with dedupe, Page OFF/restore, dedupe OFF/ON, read failures, repeated clicks and pending draft/close cancellation.');
+  // Current ChatGPT uses a form-less ProseMirror composer, not #prompt-textarea.
+  await p.evaluate(()=>snapshotDelay=0);
+  await frame.evaluate(()=>{
+    document.querySelector('form').remove();const shell=document.createElement('section');shell.setAttribute('data-composer-body','');
+    shell.innerHTML='<div role="textbox" contenteditable="true" data-composer-markdown aria-label="Ask ChatGPT" class="ProseMirror"></div><button type="submit" aria-label="Send">Send</button><button type="button" aria-label="Stop streaming" hidden>Stop</button>';
+    document.body.append(shell);window.modelDraft='';const editor=shell.querySelector('[contenteditable]');
+    editor.addEventListener('input',()=>{const value=editor.innerText;queueMicrotask(()=>modelDraft=value);});
+    shell.querySelector('[aria-label=Send]').addEventListener('click',()=>submits.push(modelDraft));
+    editor.addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey&&!e.isComposing){e.preventDefault();shell.querySelector('[aria-label=Send]').click();}});
+  });
+  const modernSend=async(question,enter=false)=>{
+    const n=await frame.evaluate(()=>submits.length),counted=await p.evaluate(()=>received.filter(m=>m.type==='SC_SENT').length);
+    const editor=frame.locator('[data-composer-markdown]');await editor.fill(question);
+    if(enter)await editor.press('Enter');else await frame.locator('[aria-label=Send]').click();
+    await frame.waitForFunction(n=>submits.length===n+1,n);const text=await frame.evaluate(()=>submits.at(-1));
+    await frame.evaluate(({text,id})=>{const n=document.createElement('div');n.dataset.messageAuthorRole='user';n.dataset.messageId=id;n.textContent=text;document.querySelector('#messages').append(n);const e=document.querySelector('[data-composer-markdown]');e.textContent='';e.dispatchEvent(new InputEvent('input',{bubbles:true}));},{text,id:'modern-'+(++turn)});
+    await p.waitForFunction(n=>received.filter(m=>m.type==='SC_SENT').length>n,counted);return text;
+  };
+  await frame.locator('.restore').click();await update('MODERN_PAGE','This guy is my favorite presenter. So enthusiastic!');
+  const modern=await modernSend('这啥意思');assert.ok(modern.includes('<Selection>\nThis guy is my favorite presenter. So enthusiastic!'));assert.ok(modern.includes('<PageContext>\nMODERN_PAGE'));
+  await update('MODERN_PAGE','Never going to use the CLI but loved the vid nonetheless.');
+  const entered=await modernSend('还有这个',true);assert.ok(entered.includes('<Selection>\nNever going'));assert.ok(entered.includes('PageReference: active; unchanged'));
+  await update('MODERN_PAGE','Selection alone');await frame.locator('.remove-page').click();const alone=await modernSend('这个');assert.ok(alone.includes('<Selection>\nSelection alone'));assert.ok(!alone.includes('<PageContext>'));
+  await frame.locator('[data-composer-markdown]').fill('do not submit while generating');await frame.locator('[aria-label=Send]').evaluate(b=>{b.hidden=true;b.disabled=true;});
+  const stopped=await frame.evaluate(()=>submits.length);await frame.locator('[data-composer-markdown]').press('Enter');assert.equal(await frame.evaluate(()=>submits.length),stopped);
+  console.log('PASS: native model payload + current form-less ProseMirror click/Enter + Selection-only sends; Page ON semantics, default dedupe, latest snapshot before send, explicit Selection target with dedupe, Page OFF/restore, dedupe OFF/ON, read failures, repeated clicks and pending draft/close cancellation.');
   await ctx.close();assert.deepEqual(report.errors,[]);
  }finally{await browser.close();server.close();}
 }

@@ -448,6 +448,7 @@
   "rn_watch": "关注",
   "rn_alert": "信号升高",
   "rn_unavailable": "暂不可用",
+  "rn_cached": "缓存预测",
   "rn_waiting": "等待更新",
   "rn_days": "天",
   "rn_hours": "小时",

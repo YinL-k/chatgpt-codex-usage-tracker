@@ -2,13 +2,18 @@
 (()=>{
   'use strict';
   const C=SakuraResetPolicy.CONFIG,$=id=>document.getElementById(id),t=k=>GPTTrackerI18n.t(k);
-  let prefs={mode:'standard',enabled:true},state=null,settings=null,prediction=null;
-  async function load(){const d=await chrome.storage.local.get([C.key,C.prefsKey]);prefs={mode:'standard',enabled:true,...d[C.prefsKey]};state=d[C.key];render();}
+  let prefs={mode:'standard',enabled:true},state=null,display=null,settings=null,prediction=null;
+  async function load(){const d=await chrome.storage.local.get([C.key,C.prefsKey,C.displayKey]);display=d[C.displayKey];prefs={mode:'standard',enabled:true,...d[C.prefsKey]};state=d[C.key];render();}
   function render(){
-    const p=state?.snapshot,valid=p&&!state.error&&Date.now()-p.at<=C.staleMs;
+    const p=display?.snapshot||state?.snapshot,valid=p&&Number.isFinite(p.at)&&p.at<=Date.now()&&[p.h6,p.h24].every(v=>Number.isFinite(v)&&v>=0&&v<=1);
+    const cached=valid&&((display?display.error:state?.error)||Date.now()-p.at>C.staleMs);
+    const threshold=C.modes[prefs.mode]||C.modes.standard;
+    const level=state?.snapshot?.at===p?.at?state?.level:(valid&&(p.h24>=threshold.h24||p.h6>=threshold.h6)?'alert':valid&&(p.h24>=C.watch.h24||p.h6>=C.watch.h6)?'watch':'normal');
+    const statusText=t(!valid?'rn_unavailable':cached?'rn_cached':'rn_'+(level||'normal'));
+    const timestamp=valid?new Date(p.at).toLocaleString(document.documentElement.lang||undefined):'';
     for(const h of [6,24]){const n=$('codexReset'+h),bar=$('codexResetBar'+h);if(n)n.textContent=valid?Math.round(p['h'+h]*100)+'%':'—';if(bar)bar.style.width=(valid?p['h'+h]*100:0)+'%';}
-    const status=$('codexResetForecastStatus');if(status){status.replaceChildren();const a=document.createElement('a');a.href='https://codex.lunarwerx.com/';a.target='_blank';a.rel='noopener';a.textContent='LunarWerx';a.addEventListener('click',e=>e.stopPropagation());status.append(a,document.createTextNode(' · '+t(valid?'rn_'+(state.level||'normal'):'rn_unavailable')));}
-    if(prediction){prediction.querySelector('h3').textContent=t('rn_title');prediction.querySelector('.rn-prediction-values').textContent=valid?`6h ${Math.round(p.h6*100)}% · 24h ${Math.round(p.h24*100)}%`:'—';prediction.querySelector('.rn-prediction-state').textContent=t(valid?'rn_'+(state.level||'normal'):'rn_unavailable')+' · '+t(prefs.mode==='low'?'rn_low':'rn_standard');prediction.querySelector('.rn-prediction-note').textContent=t('rn_note');}
+    const status=$('codexResetForecastStatus');if(status){status.replaceChildren();const a=document.createElement('a');a.href='https://codex.lunarwerx.com/';a.target='_blank';a.rel='noopener';a.textContent='LunarWerx';a.addEventListener('click',e=>e.stopPropagation());status.append(a,document.createTextNode(' · '+statusText));status.title=timestamp;}
+    if(prediction){prediction.querySelector('h3').textContent=t('rn_title');prediction.querySelector('.rn-prediction-values').textContent=valid?`6h ${Math.round(p.h6*100)}% · 24h ${Math.round(p.h24*100)}%`:'—';prediction.querySelector('.rn-prediction-values').title=timestamp;prediction.querySelector('.rn-prediction-state').textContent=statusText+' · '+t(prefs.mode==='low'?'rn_low':'rn_standard');prediction.querySelector('.rn-prediction-note').textContent=t('rn_note');}
     if(settings){
       settings.querySelector('h3').textContent=t('rn_title');settings.querySelector('.rn-note').textContent=t('rn_note');
       settings.querySelector('[data-enabled-label]').textContent=t('rn_enable');settings.querySelector('input').checked=prefs.enabled!==false;
@@ -17,6 +22,8 @@
     for(const el of document.querySelectorAll('.reset-countdown')){
       const ts=Number(el.dataset.resetAt),minutes=Math.max(0,Math.ceil((ts-Date.now())/60000));
       el.textContent=!Number.isFinite(ts)?'—':minutes===0?t('rn_waiting'):`${Math.floor(minutes/1440)}${t('rn_days')} ${Math.floor(minutes%1440/60)}${t('rn_hours')} ${minutes%60}${t('rn_minutes')}`;
+      el.dataset.waiting=String(minutes===0);
+      el.closest('.reset-item')?.setAttribute('data-countdown',el.textContent);
     }
   }
   async function save(){const result=await chrome.runtime.sendMessage({type:'RN_PREFS',...prefs}).catch(()=>null);if(!result?.ok){await load();if(settings)settings.querySelector('.rn-save-status').textContent=t('action_failed');}}
@@ -40,10 +47,12 @@
   document.addEventListener('focusout',hide);document.addEventListener('keydown',e=>{if(e.key==='Escape')hide();});
   document.addEventListener('gpt-language-changed',mount);
   document.addEventListener('visibilitychange',()=>{if(!document.hidden)render();});
-  chrome.storage.onChanged.addListener((changes,area)=>{if(area==='local'&&(changes[C.key]||changes[C.prefsKey]))void load();});
+  chrome.storage.onChanged.addListener((changes,area)=>{if(area==='local'&&(changes[C.key]||changes[C.prefsKey]||changes[C.displayKey]))void load();});
   const observer=new MutationObserver(()=>{mount();});
   const root=$('usagePanel');if(root)observer.observe(root,{childList:true});
   const resets=$('overviewResets');if(resets)new MutationObserver(render).observe(resets,{childList:true});
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',mount);else mount();
-  void load();setInterval(render,60000);
+  void load();
+  const refresh=()=>{if(!document.hidden)void chrome.runtime.sendMessage({type:'RN_REFRESH'}).catch(()=>{});};
+  refresh();document.addEventListener('visibilitychange',refresh);setInterval(()=>{render();refresh();},60000);
 })();

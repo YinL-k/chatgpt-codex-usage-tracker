@@ -26,17 +26,28 @@ async function run(){
  for(const theme of ['dark','light']){
   const p=await ctx.newPage();await setup(p,{lang:'en',theme,state:'data'});await p.setViewportSize({width:1280,height:900});await p.goto(base+'/heatmap.html');await p.waitForSelector('.reset-countdown');await p.waitForTimeout(500);
   assert.match(await p.locator('.reset-countdown').first().textContent(),/\d+d \d+h \d+m/);
+  assert.equal(await p.locator('.reset-item .reset-countdown').count(),await p.locator('.reset-countdown').count());
+  const bounds=await p.locator('.reset-countdown').first().evaluate(e=>{const a=e.getBoundingClientRect(),b=e.closest('.reset-item').getBoundingClientRect();return a.left>=b.left&&a.right<=b.right&&a.top>=b.top&&a.bottom<=b.bottom;});assert.ok(bounds,'countdown must stay inside the card');
+  await p.locator('#overviewResets').screenshot({path:path.join(out,`fixed-countdown-${theme}.png`)});
   await p.evaluate(()=>{document.querySelector('.reset-countdown').dataset.resetAt=String(Date.now()-1000);document.dispatchEvent(new Event('visibilitychange'));});assert.equal(await p.locator('.reset-countdown').first().textContent(),'Waiting for update');
   await p.screenshot({path:path.join(out,`updated-overview-${theme}.png`),fullPage:true});
   await p.locator('#tab-usage').click();await p.locator('.advanced-panel > summary').click();await p.locator('[data-mode=low]').click();
   assert.ok(await p.evaluate(()=>fixture.messages.some(m=>m.type==='RN_PREFS'&&m.mode==='low')));
   await p.screenshot({path:path.join(out,`updated-settings-${theme}.png`),fullPage:true});await p.close();
  }
+ for(const variant of ['initial','disabled','offline']){
+  const p=await ctx.newPage();await setup(p,{lang:'en',theme:'dark',state:'data'});
+  await p.addInitScript(variant=>{fixture.data.sakuraResetNotificationsV1={error:variant==='offline',level:'normal'};fixture.data.sakuraResetNotificationPrefsV1={enabled:variant!=='disabled',mode:'standard'};fixture.data.sakuraResetForecastDisplayV1={snapshot:{at:Date.now()-120000,h6:.03,h24:.25},error:variant==='offline'};},variant);
+  await p.goto(base+'/popup.html');await p.waitForFunction(()=>document.querySelector('#codexReset24')?.textContent==='25%');assert.equal(await p.locator('#codexReset6').textContent(),'3%');
+  if(variant==='offline')assert.match(await p.locator('#codexResetForecastStatus').textContent(),/Cached/);
+  await p.setViewportSize({width:420,height:800});await p.screenshot({path:path.join(out,`fixed-forecast-${variant}.png`)});
+  await p.goto(base+'/heatmap.html#overview');await p.waitForFunction(()=>document.querySelector('.rn-prediction-values')?.textContent.includes('25%'));assert.match(await p.locator('.rn-prediction-values').textContent(),/6h 3%.*24h 25%/);await p.locator('.rn-prediction').screenshot({path:path.join(out,`fixed-dashboard-forecast-${variant}.png`)});await p.close();
+ }
  // Test the actual view and extractor in Chromium (open shadow only in fixture).
- const p=await ctx.newPage();await p.goto(base+'/fixture');await p.evaluate(()=>{const original=Element.prototype.attachShadow;Element.prototype.attachShadow=function(o){return original.call(this,{...o,mode:'open'});};});
- await p.addScriptTag({path:path.join(root,'sidechat/core.js')});await p.addScriptTag({path:path.join(root,'sidechat/view.js')});
+ const p=await ctx.newPage();await p.setViewportSize({width:560,height:420});await p.goto(base+'/fixture');await p.evaluate(()=>{const original=Element.prototype.attachShadow;Element.prototype.attachShadow=function(o){return original.call(this,{...o,mode:'open'});};});
+ await p.addScriptTag({path:path.join(root,'sidechat/core.js')});await p.addScriptTag({path:path.join(root,'sidechat/strings.js')});await p.addScriptTag({path:path.join(root,'sidechat/view.js')});
  await p.evaluate(()=>{const K=SakuraSideCore,s=new K.ContextStore();window.item=s.setPage('Reference body',{}, {tabId:1,windowId:1,url:'https://example.com/',title:'Reference'});item.selection={id:'s',text:'ambiguous',capturedAt:Date.now()};window.view=SakuraSideView.create({composer:()=>document.querySelector('textarea'),translate:k=>k,onClear:()=>{item.selection=null;view.update(item,'dark',true);},onDismiss:()=>{item.page=null;view.update(item,'dark',true);},onRestore:()=>{item=s.setPage('Reference restored',{},item.source);view.update(item,'dark',false);}});view.update(item);});
- await p.locator('.chip').click();assert.equal(await p.locator('.preview').isVisible(),true);await p.locator('.remove-page').click();assert.equal(await p.locator('.remove-page').isVisible(),false);assert.equal(await p.locator('.label').textContent(),'shortSelection');assert.ok(!(await p.locator('pre').textContent()).includes('Reference body'));assert.equal(await p.locator('.restore').isVisible(),true);
+ await p.evaluate(()=>document.body.style.background='#0c0d0e');await p.locator('.chip').click();await p.locator('.preview').screenshot({path:path.join(out,'fixed-reference-blur.png')});assert.equal(await p.locator('.preview').evaluate(e=>getComputedStyle(e).backdropFilter),'blur(22px) saturate(1.15)');assert.ok(!(await p.locator('.preview').evaluate(e=>getComputedStyle(e,'::before').backgroundImage)).includes('repeating'));assert.equal(await p.locator('.preview').isVisible(),true);await p.locator('.remove-page').click();assert.equal(await p.locator('.remove-page').isVisible(),false);assert.equal(await p.locator('.label').textContent(),'shortSelection');assert.ok(!(await p.locator('pre').textContent()).includes('Reference body'));assert.equal(await p.locator('.restore').isVisible(),true);
  await p.locator('.remove').click();assert.equal(await p.locator('.row').isVisible(),false);await p.locator('.restore').click();assert.equal(await p.locator('.label').textContent(),'shortPage');
  await p.setContent('<main><h1>Exercise</h1><p><label><input type="radio" checked>B answer</label></p><button>Run</button><input type="password" value="secret"><pre>SELECT 1;</pre></main>');await p.addScriptTag({path:path.join(root,'sidechat/extractor.js')});
  const extracted=await p.evaluate(()=>SakuraPageExtract.extract().text);assert.match(extracted,/B answer.*selected/);assert.match(extracted,/Run/);assert.match(extracted,/SELECT 1/);assert.ok(!extracted.includes('secret'));

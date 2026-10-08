@@ -125,7 +125,7 @@ document.addEventListener('DOMContentLoaded',()=>{
       for(const x of items.slice(0,4)){
         const row=document.createElement('div');row.className='reset-item';
         row.innerHTML=`<span class="reset-dot${x.green?' green':''}"></span><div><span class="reset-name">${x.name}</span><span class="reset-note">${x.note}</span></div><span class="reset-time">${fmtShortDate(x.ts)}</span>`;
-        const block=document.createElement('div');block.className='reset-countdown-block';const countdown=document.createElement('div');countdown.className='reset-countdown';countdown.dataset.resetAt=x.ts;block.append(row,countdown);host.append(block);
+        const block=document.createElement('div');block.className='reset-countdown-block';const countdown=document.createElement('div');countdown.className='reset-countdown';countdown.dataset.resetAt=x.ts;row.append(countdown);block.append(row);host.append(block);
       }
     },
     renderTrend(all){

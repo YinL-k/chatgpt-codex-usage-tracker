@@ -5,7 +5,7 @@
     watch:{h24:.45,h6:.20,exit24:.40,exit6:.15},
     modes:{standard:{h24:.60,h6:.30,exit24:.50,exit6:.20},low:{h24:.75,h6:.45,exit24:.65,exit6:.35}},
     forecastURL:'https://codex.lunarwerx.com/api/v1/forecast',confirmedURL:'https://codex-reset.com/api/timeline',
-    key:'sakuraResetNotificationsV1',prefsKey:'sakuraResetNotificationPrefsV1'});
+    key:'sakuraResetNotificationsV1',prefsKey:'sakuraResetNotificationPrefsV1',displayKey:'sakuraResetForecastDisplayV1',refreshMinMs:300000});
   const date=v=>typeof v==='string'?Date.parse(v):NaN;
   function normalize(raw,now){
     const at=date(raw?.generatedAt),lastResetAt=date(raw?.lastResetAt),h6=raw?.nearTerm?.probability,h24=raw?.next24Hours?.probability;

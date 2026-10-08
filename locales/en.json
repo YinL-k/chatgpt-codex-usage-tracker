@@ -448,6 +448,7 @@
   "rn_watch": "Watch",
   "rn_alert": "Elevated",
   "rn_unavailable": "Unavailable",
+  "rn_cached": "Cached forecast",
   "rn_waiting": "Waiting for update",
   "rn_days": "d",
   "rn_hours": "h",

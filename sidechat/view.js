@@ -23,19 +23,14 @@
         .source{font-size:10px;color:var(--muted);word-break:break-all;margin-bottom:8px}.preview pre{margin:0;white-space:pre-wrap;word-break:break-word;font:11px/1.5 ui-monospace,SFMono-Regular,Consolas,monospace}
         .note{font-size:10px;color:var(--muted);margin:8px 0 0;padding-top:7px;border-top:1px solid var(--line)}[hidden]{display:none!important}
 
-        /* B SURFACE: own context controls only; no ChatGPT content or handlers changed. */
-        :host{--arc:224 149 177;--edge:rgba(242,191,211,.38);--top:rgba(255,226,239,.12);--depth:rgba(0,0,0,.17)}
-        :host([data-theme=light]){--arc:157 72 112;--edge:rgba(157,84,119,.30);--top:#fff;--depth:rgba(117,62,90,.08)}
-        .row,.preview{position:relative;isolation:isolate;border-color:var(--edge);box-shadow:inset 0 1px 0 var(--top),0 3px 10px var(--depth)}
-        .row::before,.preview::before{content:"";position:absolute;inset:0;border-radius:inherit;z-index:-1;pointer-events:none;background:repeating-radial-gradient(ellipse at 115% 130%,transparent 0 21px,rgb(var(--arc) / .095) 22px 32px,transparent 33px 52px);mask-image:linear-gradient(100deg,transparent 22%,#000 85%)}
+        /* Frosted reference surface; the text stays sharp above a quiet blur. */
+        :host{--glass:rgba(35,28,34,.76);--edge:rgba(242,191,211,.26);--sheen:rgba(244,180,207,.11)}
+        :host([data-theme=light]){--glass:rgba(255,245,249,.8);--edge:rgba(157,84,119,.22);--sheen:rgba(185,103,138,.07)}
+        .row,.preview{position:relative;isolation:isolate;background:var(--glass);border-color:var(--edge);backdrop-filter:blur(22px) saturate(1.15);-webkit-backdrop-filter:blur(22px) saturate(1.15);box-shadow:inset 0 1px 0 rgba(255,255,255,.09),0 3px 12px rgba(0,0,0,.09)}
+        .row::before,.preview::before{content:"";position:absolute;inset:0;border-radius:inherit;z-index:-1;pointer-events:none;background:linear-gradient(135deg,var(--sheen),transparent 65%)}
         .row{border-radius:10px}.remove{border-radius:0 9px 9px 0}.preview{border-radius:12px}
-        @media(forced-colors:active){.row::before,.preview::before{display:none}}
-        /* Light native-fine treatment: no broad arc in the small context surfaces. */
-        :host([data-theme=light]){--edge:rgba(157,84,119,.22);--top:rgba(255,255,255,.92);--depth:rgba(117,62,90,.04)}
-        :host([data-theme=light]) .row::before,:host([data-theme=light]) .preview::before{background:radial-gradient(ellipse at 104% 116%,rgba(173,66,111,.05),transparent 78%),linear-gradient(124deg,rgba(255,255,255,.28),transparent 45%);mask-image:none}
-        /* END B SURFACE */
-.remove-page{opacity:0;width:25px;height:26px}.row:hover .remove-page,.row:focus-within .remove-page{opacity:1}
-        .row::before,.preview::before{background:radial-gradient(ellipse at 110% 120%,rgb(var(--arc) / .12),transparent 72%),repeating-radial-gradient(ellipse at 115% 145%,transparent 0 12px,rgb(var(--arc) / .07) 13px 14px,transparent 15px 25px)}
+        .remove-page{opacity:0;width:25px;height:26px}.row:hover .remove-page,.row:focus-within .remove-page{opacity:1}
+        @media(forced-colors:active){.row,.preview{background:Canvas;backdrop-filter:none}.row::before,.preview::before{display:none}}
         .restore{padding:4px 8px;color:var(--muted)}
 </style><button class="restore" hidden></button><div class="row"><button class="chip" type="button">${svg}<span class="label"></span></button><button class="remove-page" type="button">×</button><button class="remove" type="button">\u00d7</button></div><div class="preview" hidden><div class="source"></div><pre></pre><p class="note"></p></div>`;
         shadow.querySelector('.remove-page').addEventListener('click',()=>{previewOpen=false;onDismiss(current);composer()?.focus();});
@@ -43,7 +38,7 @@
         shadow.querySelector('.chip').addEventListener('click',()=>{previewOpen=!previewOpen;lastKey='';update(current,currentTheme,dismissed);});
         shadow.querySelector('.remove').addEventListener('click',()=>{if(current?.selection)onClear(current);previewOpen=false;composer()?.focus();});
       }
-      const el=composer(),parent=el?.closest('form')||el?.parentElement?.parentElement;
+      const el=composer(),parent=el?.closest('[data-composer-body],form')||el?.parentElement?.parentElement;
       if(parent&&!parent.contains(host))parent.insertBefore(host,parent.firstChild);
       return !!el;
     }

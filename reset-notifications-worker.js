@@ -10,12 +10,18 @@
   }
   async function poll(){
     const stored=await chrome.storage.local.get([C.key,C.prefsKey]);const prefs=stored[C.prefsKey]||{};
-    if(prefs.enabled===false)return;
     const now=Date.now();let s=stored[C.key]?.version===1?stored[C.key]:P.fresh(now);
+    const prior=(await chrome.storage.local.get(C.displayKey))[C.displayKey]||{};
+    await chrome.storage.local.set({[C.displayKey]:{...prior,attemptAt:now}});
+    const [confirmed,forecast]=await Promise.allSettled([json(C.confirmedURL),json(C.forecastURL)]);
     // Persist confirmation independently, even when the forecast request fails.
-    try{s=P.endCycle(s,P.confirmed(await json(C.confirmedURL),Date.now()),Date.now());}catch{/* Last confirmed cycle remains authoritative. */}
+    if(confirmed.status==='fulfilled')s=P.endCycle(s,P.confirmed(confirmed.value,Date.now()),Date.now());
     await chrome.storage.local.set({[C.key]:s});
-    let p;try{p=P.normalize(await json(C.forecastURL),Date.now());}catch{await chrome.storage.local.set({[C.key]:{...P.interrupt(s),error:true}});return;}
+    let p;try{if(forecast.status==='rejected')throw forecast.reason;p=P.normalize(forecast.value,Date.now());}catch{await chrome.storage.local.set({[C.key]:{...P.interrupt(s),error:true},[C.displayKey]:{...prior,attemptAt:now,error:true}});return;}
+    // Display the latest validated forecast even when it cannot qualify for a
+    // notification yet. Failed refreshes retain this separately labelled cache.
+    await chrome.storage.local.set({[C.displayKey]:{snapshot:p,fetchedAt:Date.now(),attemptAt:now,error:false}});
+    if(prefs.enabled===false){await chrome.storage.local.set({[C.key]:P.interrupt(s)});return;}
     const result=P.step(s,p,prefs.mode,Date.now());s={...result.state,error:false};
     // Reserve the fixed ID before delivery: a worker restart cannot duplicate it.
     await chrome.storage.local.set({[C.key]:s});
@@ -28,8 +34,11 @@
   }
   chrome.alarms.onAlarm.addListener(a=>{if(a.name===alarm)return serial(poll);});
   chrome.runtime.onMessage.addListener((m,sender,reply)=>{
-    if(m?.type!=='RN_PREFS')return;
+    if(!['RN_PREFS','RN_REFRESH'].includes(m?.type))return;
     if(sender.id!==chrome.runtime.id||!sender.url?.startsWith(chrome.runtime.getURL('')))return;
+    if(m.type==='RN_REFRESH'){
+      void serial(async()=>{const d=(await chrome.storage.local.get(C.displayKey))[C.displayKey];if(!d?.attemptAt||Date.now()-d.attemptAt>=C.refreshMinMs)await poll();return {ok:true};}).then(reply,()=>reply({ok:false}));return true;
+    }
     void serial(async()=>{const old=await chrome.storage.local.get([C.key,C.prefsKey]);const prefs={enabled:m.enabled!==false,mode:m.mode==='low'?'low':'standard'};
       const state=P.interrupt(old[C.key]||P.fresh(Date.now()));state.mode=prefs.mode;state.startedAt=Date.now();state.level='normal';state.below=0;
       await chrome.storage.local.set({[C.prefsKey]:prefs,[C.key]:state});return {ok:true};}).then(reply,()=>reply({ok:false}));return true;

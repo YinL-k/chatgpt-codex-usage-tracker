@@ -6,7 +6,7 @@
   if(window.top===window||location.origin!=='https://chatgpt.com'||location.ancestorOrigins?.[0]!==origin)return;
   if(globalThis.__sakuraChatAdapterV1)return;globalThis.__sakuraChatAdapterV1=true;
   const K=SakuraSideCore,R=SakuraModelResolver,bridgeID=crypto.randomUUID(),SELECTOR='[data-message-author-role="user"]',MODEL_SOURCE='SAKURA_MODEL_OBSERVER_V2';
-  let dismissedSource='',captureSource='',pageDismissed=false,deduplicatePage=true,pendingSend=null,replaying=false,ledgerEpoch=0;
+  let dismissedSource='',captureSource='',pageDismissed=false,deduplicatePage=true,pendingSend=null,pendingDelivery=null,replaying=false,delivering=false,ledgerEpoch=0;
   const pageLedger=new Map();
   let port=null,context=null,labels={},theme='dark',captureStatus='',prepared={},statusLast='',lastAnnounce=0;
   let queued=0,writing=false,editorLast=null,rawRoute=location.pathname,route=chatID()||'draft:'+crypto.randomUUID();
@@ -188,11 +188,11 @@
   const norm=s=>String(s||'').replace(/\s+/g,' ').trim();
   const t=k=>labels[k]||({shortPage:'Page',shortSelection:'Selection',viewContext:'Show reference',hideContext:'Hide reference',preview:'Preview reference',remove:'Remove highlight',quoteNote:'References are added when needed.',localFoldNote:'Local display only. The reference remains in the sent message.'})[k]||k;
   const post=m=>{try{port?.postMessage(m);}catch{}};
-  function composer(){return document.querySelector('#prompt-textarea[contenteditable="true"],textarea#prompt-textarea')||document.querySelector('form textarea,form [contenteditable="true"],[data-testid*="composer"] [contenteditable="true"]');}
+  function composer(){return document.querySelector('[data-composer-body] [contenteditable="true"][data-composer-markdown],#prompt-textarea[contenteditable="true"],textarea#prompt-textarea')||document.querySelector('form textarea,form [contenteditable="true"],[data-testid*="composer"] [contenteditable="true"]');}
   function read(el){return el?(typeof el.value==='string'?el.value:el.innerText||el.textContent||''):'';}
   function sendButton(el=composer()){
     const q='[data-testid="send-button"],button[data-testid*="send-button"],button[aria-label="Send prompt"],button[aria-label="Send message"],button[aria-label="Send"],button[aria-label="\u53d1\u9001\u6d88\u606f"],button[aria-label="\u53d1\u9001\u63d0\u793a"]';
-    return el?.closest('form')?.querySelector(q)||document.querySelector(q);
+    return el?.closest('[data-composer-body],form')?.querySelector(q)||document.querySelector(q);
   }
   function modelLabel(){
     const clean=raw=>K.clean(raw,90).replace(/[\s\u00a0]+/g,' ').replace(/[›⌄▾\s]+$/g,'').trim();
@@ -279,7 +279,22 @@
     prepared={full:K.prepare(context),page:K.prepare(context,{includeSelection:false}),focus:K.prepare(context,{includePage:false})};
   }
   function clearPageLedger(){pageLedger.clear();ledgerEpoch++;}
-  function cancelPending(){if(pendingSend){clearTimeout(pendingSend.timer);pendingSend=null;}}
+  function cancelPending(){
+    if(pendingSend){clearTimeout(pendingSend.timer);pendingSend=null;}
+    if(pendingDelivery){const r=pendingDelivery;pendingDelivery=null;clearTimeout(r.timer);cancelAnimationFrame(r.frame);
+      if(r.editor===composer()&&norm(read(r.editor))===r.expectedNorm){try{writing=true;setText(r.editor,r.question);}catch{}finally{writing=false;}}
+    }
+  }
+  function deliver(r){
+    if(pendingDelivery!==r)return;
+    syncRoute();
+    if(disposed||r.route!==route||r.editor!==composer()||norm(read(r.editor))!==r.expectedNorm){cancelPending();return;}
+    const button=sendButton(r.editor);
+    if(disabled(button)){cancelPending();post({type:'SC_ERROR',key:'sendError'});return;}
+    pendingDelivery=null;clearTimeout(r.timer);cancelAnimationFrame(r.frame);receipts.push(r);if(receipts.length>30)receipts.shift();
+    delivering=true;try{button.click();}finally{delivering=false;}
+    schedule();
+  }
   function setPageReference(value){
     cancelPending();clearPageLedger();
     if(value){dismissedSource='';pageDismissed=false;post({type:'SC_RESTORE_PAGE'});}
@@ -305,6 +320,7 @@
     post({type:'SC_ENSURE_PAGE',requestId:id,pageIdentity:captureSource});
   }
   const view=SakuraSideView.create({composer,translate:t,onDismiss:()=>setPageReference(false),onRestore:()=>setPageReference(true),onClear:item=>{
+    cancelPending();
     post({type:'SC_CLEAR',id:item.id,selectionKey:K.selectionKey(item)});
     if(context?.id===item.id)context={...context,selection:null};rebuild();render();
   }});
@@ -317,7 +333,8 @@
     if(status!==statusLast){statusLast=status;post(JSON.parse(status));}
   }
   function handleSend(event){
-    if(writing||!port)return;
+    if(writing||delivering||!port)return;
+    if(pendingDelivery){event.preventDefault();event.stopImmediatePropagation();return;}
     const el=composer(),question=read(el);
     if(!el||!question.trim()||disabled(sendButton(el)))return; // Never override ChatGPT's generation/IME controls.
     syncRoute();rebuild();
@@ -340,11 +357,17 @@
       pageKey:variant?.pageKey||'',pageVersion:variant?.hasPage?version:'',pageEpoch:ledgerEpoch,selectionKey:variant?.selectionKey||'',contextId:context?.id||'',
       domModel:modelLabel(),domEffort:effortLabel(),request:(recentRequest&&recentRequest.at>=now-250&&recentRequest.at-now<7000?recentRequest:null)};
     try{
-      if(expected!==question){writing=true;setText(el,expected);writing=false;}
-      receipts.push(r);
+      if(expected!==question){
+        event.preventDefault();event.stopImmediatePropagation();
+        writing=true;setText(el,expected);writing=false;
+        // Native editors commit their model after the input event. Do not let
+        // the original click/Enter submit a stale React/ProseMirror draft.
+        pendingDelivery=r;r.frame=requestAnimationFrame(()=>{r.frame=requestAnimationFrame(()=>deliver(r));});
+        r.timer=setTimeout(()=>deliver(r),120);
+      }else receipts.push(r);
       if(receipts.length>30)receipts.shift();
       schedule();
-      // NO preventDefault / synthetic send on the normal path.
+      // Messages without references keep the original native event path.
     }catch{
       writing=false;
       // Only an actual editor-write failure cancels this one event. No timed lock.
@@ -433,6 +456,7 @@
       if(m?.type!=='SC_UPDATE')return;
       const nextDedupe=m.deduplicatePage!==false;if(nextDedupe!==deduplicatePage){deduplicatePage=nextDedupe;clearPageLedger();cancelPending();}
       const nextSource=m.source?.pageIdentity||m.source?.url||'';if(captureSource!==nextSource)cancelPending();
+      if(m.pageDismissed&&!pageDismissed)cancelPending();
       captureSource=m.source?.pageIdentity||m.source?.url||'';
       if(dismissedSource && captureSource!==dismissedSource)dismissedSource='';
       pageDismissed=!!m.pageDismissed||!!dismissedSource;
@@ -450,7 +474,7 @@
     });
     observer.observe(document.documentElement,{subtree:true,childList:true,attributes:true,attributeFilter:['data-message-id','data-message-status']});
     document.addEventListener('input',e=>{
-      if(!writing){const el=composer();if(pendingSend&&(el===e.target||el?.contains(e.target)))pendingSend.cancelled=true;if(el&&(el===e.target||el.contains(e.target)))for(const r of receipts)if(r.editor===el)r.consumed=true;}
+      if(!writing){const el=composer();if(pendingSend&&(el===e.target||el?.contains(e.target)))pendingSend.cancelled=true;if(pendingDelivery&&(el===e.target||el?.contains(e.target))&&read(el)!==pendingDelivery.expected)cancelPending();if(el&&(el===e.target||el.contains(e.target)))for(const r of receipts)if(r.editor===el)r.consumed=true;}
       schedule();
     },true);
   }
