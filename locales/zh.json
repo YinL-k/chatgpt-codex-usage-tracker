@@ -452,5 +452,8 @@
   "rn_waiting": "等待更新",
   "rn_days": "天",
   "rn_hours": "小时",
-  "rn_minutes": "分钟"
+  "rn_minutes": "分钟",
+  "pro_allowance_pending": "额度待确认",
+  "pro_observed_pending": "额度待确认 · 仅显示本地已记录的 Pro 使用量。",
+  "pro_account_limits": "以账号实际返回的额度为准，不预设固定消息额度。"
 }

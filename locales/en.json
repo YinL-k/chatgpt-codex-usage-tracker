@@ -452,5 +452,8 @@
   "rn_waiting": "Waiting for update",
   "rn_days": "d",
   "rn_hours": "h",
-  "rn_minutes": "m"
+  "rn_minutes": "m",
+  "pro_allowance_pending": "Allowance pending confirmation",
+  "pro_observed_pending": "Allowance pending confirmation · locally recorded Pro sends only.",
+  "pro_account_limits": "Uses your account’s reported allowance; no fixed message quota is assumed."
 }

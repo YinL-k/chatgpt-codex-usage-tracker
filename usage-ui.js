@@ -7,8 +7,8 @@
   const node=(tag,cls,value)=>{const n=document.createElement(tag);if(cls)n.className=cls;if(value!==undefined)n.textContent=value;return n;};
   const fmt=n=>Number.isFinite(n)?new Intl.NumberFormat().format(n):'—';
   const date=n=>Number.isFinite(n)?new Date(n).toLocaleString(document.documentElement.lang,{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'}):'—';
-  function ruleName(r){if(r.mode==='official'&&r.label)return r.label;return r.id==='astra_week'?'GPT-6 Pro':r.id==='sol_day'?'GPT-5.6 Sol Pro':r.id==='combined_day'?t('u_combined','Combined daily'):t('u_shared','Shared allowance');}
-  function ruleRef(r){if(r.mode==='official'){if(Number.isFinite(r.cap)&&Number.isFinite(r.windowSeconds))return `${fmt(r.cap)} / ${C.windowLabel(r.windowSeconds,document.documentElement.lang)}`;if(Number.isFinite(r.windowSeconds))return C.windowLabel(r.windowSeconds,document.documentElement.lang);if(Number.isFinite(r.cap))return `${fmt(r.cap)} ${t('u_reference','reference')}`;return t('compact_server_reported','Reported by ChatGPT');}return `${r.cap} / ${t('u_'+r.period,r.period)}`;}
+  function ruleName(r){if(r.allowancePending)return 'Pro';if(r.mode==='official'&&r.label)return r.label;return r.id==='astra_week'?'GPT-6 Pro':r.id==='sol_day'?'GPT-5.6 Sol Pro':r.id==='combined_day'?t('u_combined','Combined daily'):t('u_shared','Shared allowance');}
+  function ruleRef(r){if(r.allowancePending)return t('pro_allowance_pending');if(r.mode==='official'){if(Number.isFinite(r.cap)&&Number.isFinite(r.windowSeconds))return `${fmt(r.cap)} / ${C.windowLabel(r.windowSeconds,document.documentElement.lang)}`;if(Number.isFinite(r.windowSeconds))return C.windowLabel(r.windowSeconds,document.documentElement.lang);if(Number.isFinite(r.cap))return `${fmt(r.cap)} ${t('u_reference','reference')}`;return t('compact_server_reported','Reported by ChatGPT');}return `${r.cap} / ${t('u_'+r.period,r.period)}`;}
   function localDateTime(ts){const d=new Date(ts);return `${C.localDate(ts)}T${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;}
 
   function mount(root){
@@ -71,10 +71,12 @@
       if(r.mode==='official')left=t('pro_reported','Reported by ChatGPT');
       else if(r.mode==='learned')left=t('pro_learned','Estimated from learned reset cycle + local sends.');
       else if(r.mode==='manual')left=t('pro_corrected','Corrected manually in Advanced.');
+      else if(r.allowancePending)left=t('pro_observed_pending');
       else left=t('pro_observed_learning','Confirmed local Pro sends only · learning reset cycle automatically.');
       let right='';
       if(Number.isFinite(r.resetAt))right=`${t('compact_resets','Resets')} ${date(r.resetAt)}`;
       else if(r.mode==='official')right=t('reset_unknown','Reset not reported');
+      else if(r.allowancePending)right=t('pro_allowance_pending');
       else if(r.mode==='observed')right=t('pro_learning_cycle','Learning reset cycle');
       else right=ruleRef(r);
       meta.append(node('span','',left),node('span','',right));c.append(meta);return c;
@@ -138,9 +140,9 @@
 
       $('membership').replaceChildren(new Option(t('u_use_detected','Use detected plan'),'auto'));for(const [id,p] of Object.entries(C.plans)){if(id==='business_unknown')continue;$('membership').append(new Option(p.label,id));}$('membership').value=manualPlan()||'auto';
       const sig=`${key}:${window.GPTTrackerI18n?.currentLang}`;if(sig!==formKey){formKey=sig;$('calRule').replaceChildren();for(const r of preset?.rules||[])$('calRule').append(new Option(`${ruleName(r)} · ${ruleRef(r)}`,r.id));fillCalibration();}
-      const disabled=!preset?.rules?.length;for(const el of $('calibrationForm').elements)el.disabled=disabled;$('calDisabled').textContent=disabled?t('u_cal_disabled','Choose a plan with a Pro allowance first.'):'';
+      const disabled=!preset?.rules?.length;for(const el of $('calibrationForm').elements)el.disabled=disabled;$('calDisabled').textContent=disabled?(preset?.allowancePending?t('pro_allowance_pending'):t('u_cal_disabled','Choose a plan with a Pro allowance first.')):'';
       $('recentModels').replaceChildren();const groups=new Map();for(const e of s.events.filter(e=>e.scope===SCOPE)){const k=e.model||t('u_unknown','Unknown');groups.set(k,(groups.get(k)||0)+1);}if(!groups.size)empty($('recentModels'),t('u_model_empty','No local model records yet.'));else{const table=node('table','usage-table');for(const [m,n]of [...groups].sort((a,b)=>b[1]-a[1]).slice(0,12)){const row=node('tr');row.append(node('td','',m),node('td','',fmt(n)));table.append(row);}$('recentModels').append(table);}$('coverage').textContent=`${t('u_coverage','Tracking since')}: ${date(s.coverageStart)}`;
-      $('planTable').replaceChildren();for(const [id,p]of Object.entries(C.plans)){if(id==='business_unknown')continue;const r=node('tr');r.append(node('td','',p.label),node('td','',p.rules===null?t('u_managed','Managed'):p.rules.length?p.rules.map(v=>`${ruleName(v)} ${ruleRef(v)}`).join('; '):t('u_none','No Pro preset')));$('planTable').append(r);}
+      $('planTable').replaceChildren();for(const [id,p]of Object.entries(C.plans)){if(id==='business_unknown')continue;const r=node('tr');r.append(node('td','',p.label),node('td','',p.allowancePending?t('pro_account_limits'):p.rules===null?t('u_managed','Managed'):p.rules.length?p.rules.map(v=>`${ruleName(v)} ${ruleRef(v)}`).join('; '):t('u_none','No Pro preset')));$('planTable').append(r);}
     }
 
     async function load(){const r=await send({type:'UG_STATE'});if(r.ok){s=C.state(r.state);live=r.liveUsage||null;liveError=r.liveError||null;proUsage=r.proUsage||null;proCycles=r.proCycles||null;}else GPTFeedback.status(t('state_error'),true);render();GPTTrackerI18n.applyI18n(root);}

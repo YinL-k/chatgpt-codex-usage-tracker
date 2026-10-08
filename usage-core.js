@@ -14,11 +14,12 @@
   const SOURCE = 'https://help.openai.com/en/articles/20001354';
   const plans = {
     free: {label:'Free',rules:[]}, go:{label:'Go',rules:[]}, plus:{label:'Plus',rules:[]},
-    pro100:{label:'Pro $100 / 5x',rules:[{id:'shared_week',cap:50,period:'week',kind:'all_pro'}]},
-    pro200:{label:'Pro $200 / 20x',rules:[{id:'astra_week',cap:200,period:'week',kind:'gpt6_pro'},{id:'sol_day',cap:170,period:'day',kind:'sol_pro'},{id:'combined_day',cap:200,period:'day',kind:'all_pro'}]},
+    pro100:{label:'Pro $100',rules:null,allowancePending:true},
+    pro200:{label:'Pro $200',rules:null,allowancePending:true},
+    pro500:{label:'Pro $500',rules:null,allowancePending:true},
     business_standard:{label:'Business Standard',rules:[{id:'shared_month',cap:15,period:'month',kind:'all_pro'}]},
     business_premium:{label:'Business Premium',rules:[{id:'shared_week',cap:50,period:'week',kind:'all_pro'}]},
-    pro_unknown:{label:'Pro',rules:null}, business_unknown:{label:'Business',rules:null}, enterprise:{label:'Enterprise',rules:null}, edu:{label:'Edu',rules:null}
+    pro_unknown:{label:'Pro',rules:null,allowancePending:true}, business_unknown:{label:'Business',rules:null}, enterprise:{label:'Enterprise',rules:null}, edu:{label:'Edu',rules:null}
   };
   const obj = x => x && typeof x === 'object' && !Array.isArray(x) ? x : {};
   const text = (x,n=100) => typeof x === 'string' ? x.replace(/[\u0000-\u001f]/g,'').trim().slice(0,n) : '';
@@ -57,7 +58,7 @@
       if(seat==='standard' || list.includes('self_serve_business_usage_based'))return 'business_standard';
       return 'business_unknown';
     }
-    const map={free:'free',chatgptfreeplan:'free',go:'go',chatgptgo:'go',plus:'plus',chatgptplusplan:'plus',prolite:'pro100',pro:'pro_unknown',chatgptpro:'pro_unknown',pro100:'pro100',pro200:'pro200',pro_100:'pro100',pro_200:'pro200',enterprise:'enterprise',chatgptenterprise:'enterprise',edu:'edu',chatgptedu:'edu',business_standard:'business_standard'};
+    const map={free:'free',chatgptfreeplan:'free',go:'go',chatgptgo:'go',plus:'plus',chatgptplusplan:'plus',prolite:'pro100',pro:'pro_unknown',chatgptpro:'pro_unknown',pro100:'pro100',pro200:'pro200',pro_100:'pro100',pro_200:'pro200',pro500:'pro500',pro_500:'pro500',enterprise:'enterprise',chatgptenterprise:'enterprise',edu:'edu',chatgptedu:'edu',business_standard:'business_standard'};
     for(const code of list)if(map[code])return map[code];
     return '';
   }
@@ -282,6 +283,11 @@
         const observed=s.events.filter(e=>e.scope===scope&&e.ts<=now&&e.ts>=now-observedWindow&&e.kind.endsWith('_pro')).length;
         return {...m,cap,remaining,observed,mode:'official',trust:serverFresh.kind,source:'chatgpt'};
       });
+    }
+    // Personal Pro caps vary by account; old baselines and learned cycles cannot supply a cap.
+    if(preset?.allowancePending){
+      const observed=s.events.filter(e=>e.scope===scope&&e.ts<=now&&e.kind.endsWith('_pro')).length;
+      return [{id:'observed_pro',label:'Pro',kind:'all_pro',cap:null,remaining:null,remainingPercent:null,resetAt:null,observed,mode:'observed',trust:'tracking',allowancePending:true}];
     }
     if(!rules)return [];
     const manual=allowance(s,scope,planKey,now).map(r=>({...r,mode:r.remaining!==null?'manual':'observed',trust:r.remaining!==null?'estimated':'tracking'}));

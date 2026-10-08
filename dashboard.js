@@ -92,7 +92,7 @@ document.addEventListener('DOMContentLoaded',()=>{
       if(proRule){
         if(Number.isFinite(proRule.remaining)){proEl.textContent=`${proRule.mode==='official'?'':'≈ '}${fmt(proRule.remaining)}`;proSub.textContent=Number.isFinite(proRule.resetAt)?`${proRule.mode==='official'?t('pro_reported','Reported by ChatGPT'):t('trust_estimated')} · ${t('compact_resets')} ${fmtShortDate(proRule.resetAt)}`:(proRule.mode==='official'?t('pro_reported','Reported by ChatGPT'):t('pro_learning_cycle','Learning reset cycle'));}
         else if(Number.isFinite(proRule.remainingPercent)){proEl.textContent=`${fmt(proRule.remainingPercent)}%`;proSub.textContent=Number.isFinite(proRule.resetAt)?`${t('pro_reported','Reported by ChatGPT')} · ${t('compact_resets')} ${fmtShortDate(proRule.resetAt)}`:t('pro_reported','Reported by ChatGPT');}
-        else{proEl.textContent=fmt(proRule.observed||0);proSub.textContent=t('pro_observed_learning','Confirmed local Pro sends only · learning reset cycle automatically.');}
+        else{proEl.textContent=fmt(proRule.observed||0);proSub.textContent=proRule.allowancePending?t('pro_observed_pending'):t('pro_observed_learning','Confirmed local Pro sends only · learning reset cycle automatically.');}
       }else{proEl.textContent='—';proSub.textContent=preset?t('pro_waiting_metadata','Tracking Pro sends · waiting for reset metadata'):t('plan_unknown');}
 
       const primary=(live?.meters||[]).find(m=>m.id==='main:primary_window')||(live?.meters||[]).find(m=>m.id.endsWith('primary_window'));

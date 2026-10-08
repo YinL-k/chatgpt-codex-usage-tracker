@@ -28,10 +28,10 @@ test('partial/malformed server payloads do not fabricate balances or throw',()=>
  assert.equal(C.normalizeInit({model_limits:[null,{}]},now).meters.length,0);
 });
 test('baseline increments only matching new events, then expires',()=>{
- const s=C.freshState(now);s.settings[scope]={plan:'pro200',baselines:{astra_week:{plan:'pro200',cap:200,used:12,at:now-2000,resetAt:now+5000}}};
+ const s=C.freshState(now);s.settings[scope]={plan:'business_premium',baselines:{shared_week:{plan:'business_premium',cap:50,used:12,at:now-2000,resetAt:now+5000}}};
  s.events=[evt('a',now-3000),evt('b',now-1000),evt('c',now-500,'GPT-5.6 Sol Pro'),evt('d',now+1000)];
- let r=C.allowance(s,scope,'pro200',now)[0];assert.equal(r.used,13);assert.equal(r.remaining,187);assert.equal(r.observed,2);
- r=C.allowance(s,scope,'pro200',now+6000)[0];assert.equal(r.used,null);assert.equal(r.resetAt,null);assert.equal(r.expired,true);
+ let r=C.allowance(s,scope,'business_premium',now)[0];assert.equal(r.used,14);assert.equal(r.remaining,36);assert.equal(r.observed,3);
+ r=C.allowance(s,scope,'business_premium',now+6000)[0];assert.equal(r.used,null);assert.equal(r.resetAt,null);assert.equal(r.expired,true);
 });
 test('migration preserves settings, calibration, snapshots, extra fields; unknown schema refuses overwrite',()=>{
  const raw={...C.freshState(now),schema:2,custom:{x:1},snapshots:{legacy:1},settings:{[scope]:{plan:'pro200',baselines:{x:{used:1}}}},events:[evt('a',now-1),evt('a',now-1)]};
