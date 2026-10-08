@@ -18,9 +18,9 @@
 #artboard .membership .popup-notice #noticeRetry{font-size:20px!important;white-space:normal}
 .reset-countdown-block{position:relative;padding-top:20px;container-type:inline-size}
 .reset-countdown-block .reset-item{position:relative;isolation:isolate;overflow:hidden;min-height:0;grid-template-rows:auto auto;row-gap:4px;align-content:start;padding:18px 16px 0;margin-bottom:0;box-shadow:none}
-.reset-countdown{position:relative;z-index:1;grid-column:1/-1;text-align:right;align-self:end;width:100%;font-family:Inter,system-ui,sans-serif;font-size:clamp(28px,13.2cqi,68px);font-weight:750;letter-spacing:-1.8px;line-height:1.12;margin-top:4px;padding:0;transform:translateY(9px);font-variant-numeric:tabular-nums;white-space:nowrap;background:linear-gradient(180deg,rgba(155,77,108,.58) 0%,rgba(155,77,108,.27) 45%,rgba(155,77,108,0) 96%);background-clip:text;-webkit-background-clip:text;color:transparent}
+.reset-countdown{position:relative;z-index:1;grid-column:1/-1;text-align:right;align-self:end;width:100%;font-family:Inter,system-ui,sans-serif;font-size:clamp(24px,11.5cqi,62px);font-weight:750;letter-spacing:-1.8px;line-height:1.12;margin-top:4px;padding:0;transform:translateY(9px);font-variant-numeric:tabular-nums;white-space:nowrap;background:linear-gradient(180deg,rgba(155,77,108,.58) 0%,rgba(155,77,108,.27) 45%,rgba(155,77,108,0) 96%);background-clip:text;-webkit-background-clip:text;color:transparent}
 body.dark .reset-countdown{background-image:linear-gradient(180deg,rgba(237,178,198,.55) 0%,rgba(237,178,198,.22) 45%,rgba(237,178,198,0) 96%)}
-.reset-countdown-block .reset-item::after{content:attr(data-countdown);position:absolute;right:16px;bottom:-2px;max-width:calc(100% - 32px);font:750 clamp(28px,13.2cqi,68px)/1.12 Inter,system-ui,sans-serif;letter-spacing:-1.8px;white-space:nowrap;color:rgba(192,110,144,.12);filter:blur(4px);transform:translateY(-8px);mask-image:linear-gradient(180deg,#000,transparent 85%);pointer-events:none;z-index:-1}
+.reset-countdown-block .reset-item::after{content:attr(data-countdown);position:absolute;right:16px;bottom:-2px;max-width:calc(100% - 32px);font:750 clamp(24px,11.5cqi,62px)/1.12 Inter,system-ui,sans-serif;letter-spacing:-1.8px;white-space:nowrap;color:rgba(192,110,144,.12);filter:blur(4px);transform:translateY(-8px);mask-image:linear-gradient(180deg,#000,transparent 85%);pointer-events:none;z-index:-1}
 body.dark .reset-countdown-block .reset-item::after{color:rgba(237,178,198,.17)}
 .reset-countdown[data-waiting=true]{font-size:16px;letter-spacing:0;white-space:normal;background:none;color:inherit;opacity:.6;padding-bottom:16px;transform:none}
 .reset-countdown-block .reset-item:has([data-waiting=true])::after{display:none}
@@ -31,7 +31,7 @@ body.dark .reset-countdown-block .reset-item::after{color:rgba(237,178,198,.17)}
 .rn-prediction-values{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:26px;font-variant-numeric:tabular-nums}
 .rn-window{display:grid;grid-template-columns:auto 1fr;align-items:baseline;column-gap:9px;row-gap:10px;min-width:0}
 .rn-window-label{font:500 11px/1.3 Inter,system-ui,sans-serif;letter-spacing:.5px;color:var(--secondary-text);opacity:.75}
-.rn-window strong{font:650 clamp(32px,4vw,44px)/1.15 Inter,system-ui,sans-serif;letter-spacing:-1.4px;background:linear-gradient(180deg,#a75074 12%,rgba(167,80,116,.18) 100%);background-clip:text;-webkit-background-clip:text;color:transparent}
+.rn-window strong{font:650 32px/1.15 Inter,system-ui,sans-serif;letter-spacing:-1.4px;background:linear-gradient(180deg,#a75074 12%,rgba(167,80,116,.18) 100%);background-clip:text;-webkit-background-clip:text;color:transparent}
 body.dark .rn-window strong{background-image:linear-gradient(180deg,#efb0c4 12%,rgba(239,176,196,.16) 100%)}
 .rn-window-separator{display:none}
 @media(forced-colors:active){.rn-window strong{background:none;color:CanvasText}}

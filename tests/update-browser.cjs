@@ -26,7 +26,7 @@ async function run(){
  const small=await ctx.newPage();await setup(small,{lang:'zh',theme:'light',state:'empty'});await small.setViewportSize({width:320,height:440});await small.addInitScript(()=>Object.defineProperty(screen,'availHeight',{value:520}));await small.goto(base+'/popup.html');await small.waitForTimeout(300);const smallFooter=await small.locator('.footer').boundingBox();assert.ok(smallFooter.y+smallFooter.height<=440);await small.close();
  for(const theme of ['dark','light']){
   const p=await ctx.newPage();await setup(p,{lang:'en',theme,state:'data'});await p.setViewportSize({width:1280,height:900});await p.goto(base+'/heatmap.html');await p.waitForSelector('.reset-countdown');await p.waitForTimeout(500);
-  assert.match(await p.locator('.reset-countdown').first().textContent(),/\d+d \d+h \d+m/);
+  assert.match(await p.locator('.reset-countdown').first().textContent(),/\d+d : \d+h : \d+m/);
   assert.equal(await p.locator('.reset-item .reset-countdown').count(),await p.locator('.reset-countdown').count());
   const bounds=await p.locator('.reset-countdown').first().evaluate(e=>{const a=e.getBoundingClientRect(),b=e.closest('.reset-item').getBoundingClientRect();return a.left>=b.left&&a.right<=b.right&&a.top>=b.top&&a.bottom>b.bottom&&a.bottom-b.bottom<=12;});assert.ok(bounds,'countdown stays horizontally inside the card and fades just below its clipped bottom edge');
   for(const button of await p.locator('.header-right .secondary-button').all()){

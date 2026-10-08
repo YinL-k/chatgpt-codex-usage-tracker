@@ -21,7 +21,7 @@
     }
     for(const el of document.querySelectorAll('.reset-countdown')){
       const ts=Number(el.dataset.resetAt),minutes=Math.max(0,Math.ceil((ts-Date.now())/60000));
-      el.textContent=!Number.isFinite(ts)?'—':minutes===0?t('rn_waiting'):`${Math.floor(minutes/1440)}${t('rn_days')} ${Math.floor(minutes%1440/60)}${t('rn_hours')} ${minutes%60}${t('rn_minutes')}`;
+      el.textContent=!Number.isFinite(ts)?'—':minutes===0?t('rn_waiting'):`${Math.floor(minutes/1440)}d : ${Math.floor(minutes%1440/60)}h : ${minutes%60}m`;
       el.dataset.waiting=String(minutes===0);
       el.closest('.reset-item')?.setAttribute('data-countdown',el.textContent);
     }
