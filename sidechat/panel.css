@@ -237,7 +237,8 @@ body:has(#chat-frame) .welcome-art .halo{
 }
 
 .sm-ambient{
-  position:fixed;inset:0;z-index:2147483643;pointer-events:none;overflow:hidden;
+  /* Below .workspace (z-index:1), never over the embedded composer. */
+  position:fixed;inset:0;z-index:0;pointer-events:none;overflow:hidden;
   contain:paint;transform:translateZ(0);backface-visibility:hidden;
 }
 .sm-ambient-blob{
