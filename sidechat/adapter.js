@@ -88,11 +88,34 @@
     // changed z-index, which caused a visible 1-2 frame jump during opening.
     bar.dataset.sidebarOpen=sidebar?'true':'false';
   }
+  let scrollbarSurface=null,scrollbarComposer=null;
+  const scrollbarObserver=typeof ResizeObserver==='function'?new ResizeObserver(()=>syncScrollbarBoundary()):null;
+  function syncScrollbarBoundary(){
+    const surface=document.querySelector('.thread-scroll-container[data-app-action-timeline-scroll]');
+    const input=composer()?.closest('[data-composer-surface-variant],form');
+    if(surface!==scrollbarSurface||input!==scrollbarComposer){
+      scrollbarObserver?.disconnect();
+      scrollbarSurface?.removeAttribute('data-sakura-scrollbar');
+      scrollbarSurface?.style.removeProperty('--sm-scrollbar-bottom');
+      scrollbarSurface=surface;scrollbarComposer=input;
+      if(surface)scrollbarObserver?.observe(surface);
+      if(input)scrollbarObserver?.observe(input);
+    }
+    if(!surface)return;
+    const bounds=surface.getBoundingClientRect(),box=input?.getBoundingClientRect();
+    const inset=box&&box.height>0?Math.max(0,Math.min(bounds.height-24,bounds.bottom-box.top+8)):0;
+    surface.dataset.sakuraScrollbar='true';
+    surface.style.setProperty('--sm-scrollbar-bottom',Math.ceil(inset)+'px');
+  }
   function ensureNativeStyle(){
     let style=document.getElementById(NATIVE_STYLE_ID);
     if(style)return style;
     style=document.createElement('style');style.id=NATIVE_STYLE_ID;
     style.textContent=`
+      [data-sakura-scrollbar="true"]{scrollbar-width:auto!important;scrollbar-color:auto!important}
+      [data-sakura-scrollbar="true"]::-webkit-scrollbar{width:6px}
+      [data-sakura-scrollbar="true"]::-webkit-scrollbar-track{margin-bottom:var(--sm-scrollbar-bottom,0px);background:transparent}
+      [data-sakura-scrollbar="true"]::-webkit-scrollbar-thumb{background:rgba(128,128,128,.42);border-radius:999px}
       [data-sakura-hide-mode-switch="true"]{display:none!important}
       html[data-sakura-sidechat-theme="dark"]{
         --main-surface-primary:#08080b!important;--main-surface-secondary:#0d0c10!important;
@@ -326,6 +349,7 @@
   }});
   function render(){
     ensureNativeBar();
+    syncScrollbarBoundary();
     if(!port)return;
     view.update(context,theme,pageDismissed);
     const el=composer();
@@ -480,7 +504,8 @@
   }
   if(document.documentElement)observe();else document.addEventListener('DOMContentLoaded',observe,{once:true});
   if(document.body)ensureNativeBar();else document.addEventListener('DOMContentLoaded',ensureNativeBar,{once:true});
+  window.addEventListener('resize',syncScrollbarBoundary);
   const timer=setInterval(()=>{announce();if(receipts.length||editorLast!==composer()||rawRoute!==location.pathname){editorLast=composer();schedule();}},500);
-  window.addEventListener('pagehide',()=>{disposed=true;cancelPending();clearPageLedger();clearInterval(timer);clearTimeout(queued);observer?.disconnect();context=null;receipts.length=0;port?.close();});
+  window.addEventListener('pagehide',()=>{disposed=true;cancelPending();clearPageLedger();clearInterval(timer);clearTimeout(queued);observer?.disconnect();scrollbarObserver?.disconnect();window.removeEventListener('resize',syncScrollbarBoundary);context=null;receipts.length=0;port?.close();});
   announce();
 })();
