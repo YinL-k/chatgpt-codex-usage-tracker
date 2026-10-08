@@ -220,10 +220,12 @@ async function refreshLive(){
 function openDashboard(hash='overview'){chrome.tabs.create({url:chrome.runtime.getURL(`heatmap.html#${hash}`)});}
 function syncLanguageButtons(lang){document.querySelectorAll('[data-language]').forEach(btn=>btn.setAttribute('aria-pressed',String(btn.dataset.language===lang)));}
 function applyPopupTheme(theme){theme=theme==='light'?'light':'dark';const artboard=$('artboard'),toggle=$('popupThemeToggle');if(artboard)artboard.dataset.theme=theme;document.body.dataset.popupTheme=theme;document.dispatchEvent(new CustomEvent('gpt-popup-theme-changed'));if(toggle){toggle.setAttribute('aria-checked',String(theme==='dark'));toggle.setAttribute('aria-label',theme==='dark'?t('tooltip_switch_to_light'):t('tooltip_switch_to_dark'));}localStorage.setItem('gptTrackerTheme',theme);}
-function fitReference(){const viewport=$('viewport'),artboard=$('artboard');if(!viewport||!artboard)return;const scale=Math.min(355/941,Math.min(600,Math.max(240,screen.availHeight-80))/1610);artboard.style.setProperty('--scale',String(scale));viewport.style.width=`${941*scale}px`;viewport.style.height=`${1610*scale}px`;document.documentElement.style.width=document.body.style.width=viewport.style.width;document.documentElement.style.height=document.body.style.height=viewport.style.height;}
+function fitReference(heightLimit=630){const viewport=$('viewport'),artboard=$('artboard');if(!viewport||!artboard)return;const scale=Math.min(374/941,Math.min(heightLimit,Math.max(240,screen.availHeight-80))/1610);artboard.style.setProperty('--scale',String(scale));viewport.style.width=`${941*scale}px`;viewport.style.height=`${1610*scale}px`;document.documentElement.style.width=document.body.style.width=viewport.style.width;document.documentElement.style.height=document.body.style.height=viewport.style.height;}
 
 document.addEventListener('DOMContentLoaded',async()=>{
   fitReference();
+  // Native popup hosts may clamp the requested height; keep the footer reachable.
+  window.addEventListener('resize',()=>{if(innerHeight>0&&innerHeight+1<parseFloat($('viewport').style.height))fitReference(innerHeight);});
   const prefersDark=window.matchMedia?.('(prefers-color-scheme: dark)').matches!==false;applyPopupTheme(localStorage.getItem('gptTrackerTheme')||(prefersDark?'dark':'light'));
   $('popupThemeToggle')?.addEventListener('click',()=>applyPopupTheme($('artboard').dataset.theme==='dark'?'light':'dark'));
   const langPref=await chrome.storage.sync.get('gptTrackerLang'),lang=langPref.gptTrackerLang||((navigator.language||'').toLowerCase().startsWith('zh')?'zh':'en');

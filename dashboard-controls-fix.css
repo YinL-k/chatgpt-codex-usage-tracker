@@ -523,3 +523,6 @@ body:not(.dark) .header-right .year-select-shell.is-open .year-select-trigger{
   border-color:rgba(191,82,123,.38)!important;
 }
 body:not(.dark) .header-right .year-select-caret{color:#ad617e!important}
+/* Hover changes color, never the utility controls' border geometry. */
+.header-right .secondary-button,
+.header-right .secondary-button:is(:hover,:focus-visible,:active){border-width:1px!important;border-style:solid!important;transform:none!important;scale:none!important;translate:none!important}

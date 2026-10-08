@@ -8,7 +8,7 @@
     function mount() {
       if(!host) {
         host=document.createElement('div');host.dataset.sakuraSidechat='quote';
-        host.style.cssText='margin:4px 10px 5px;max-width:100%;position:relative;z-index:2;';
+        host.style.cssText='margin:12px 14px 7px;max-width:100%;position:relative;z-index:2;';
         shadow=host.attachShadow({mode:'closed'});
         shadow.innerHTML=`<style>
         :host{--ink:#efbdd0;--bg:#292129;--line:rgba(228,158,190,.27);--muted:#bca6b6;font:11px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:var(--ink)}
@@ -28,7 +28,7 @@
         :host([data-theme=light]){--glass:rgba(255,245,249,.8);--edge:rgba(157,84,119,.22);--sheen:rgba(185,103,138,.07)}
         .row,.preview{position:relative;isolation:isolate;background:var(--glass);border-color:var(--edge);backdrop-filter:blur(22px) saturate(1.15);-webkit-backdrop-filter:blur(22px) saturate(1.15);box-shadow:inset 0 1px 0 rgba(255,255,255,.09),0 3px 12px rgba(0,0,0,.09)}
         .row::before,.preview::before{content:"";position:absolute;inset:0;border-radius:inherit;z-index:-1;pointer-events:none;background:linear-gradient(135deg,var(--sheen),transparent 65%)}
-        .row{border-radius:10px}.remove{border-radius:0 9px 9px 0}.preview{border-radius:12px}
+        .row{border-radius:999px;overflow:hidden}.chip{border-radius:999px 0 0 999px;padding:5px 10px}.remove{border-radius:0 999px 999px 0}.preview{border-radius:20px}
         .remove-page{opacity:0;width:25px;height:26px}.row:hover .remove-page,.row:focus-within .remove-page{opacity:1}
         @media(forced-colors:active){.row,.preview{background:Canvas;backdrop-filter:none}.row::before,.preview::before{display:none}}
         .restore{padding:4px 8px;color:var(--muted)}
